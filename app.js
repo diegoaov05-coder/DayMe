@@ -107,30 +107,83 @@ function App(){
   const initDone=useRef(false);
   const skipFB=useRef(false);
 
+ // Nuevas variables de control
+  const[conflict,setConflict]=useState(null);
+  const isResolving=useRef(true);
+  const isDirty=useRef(false);
+  const markDirty = () => { isDirty.current = true; };
+
+  const applyData = (d) => {
+    setTasks(autoArc(d.tasks || []));
+    setComp(d.completed || {});
+    setSkip(d.skipped || {});
+    if (d.notified) ntfSet.current = new Set(d.notified);
+    sL(d);
+    setLoading(false);
+  };
+
   // ═══ INIT ═══
   useEffect(()=>{
     if(initDone.current)return;initDone.current=true;
-    // 1) Load local immediately
-    const local=lL();
-    if(local&&local.tasks&&local.tasks.length>0){
-      setTasks(autoArc(local.tasks));setComp(local.completed||{});setSkip(local.skipped||{});
-      if(local.notified)ntfSet.current=new Set(local.notified);
-    }else{
-      setTasks(SEED);const d={tasks:SEED,completed:{},skipped:{},notified:[]};sL(d);
-      try{dataRef.set(d)}catch(e){}
-    }
-    setLoading(false);
-    // 2) Firebase listener
-    try{dataRef.on('value',snap=>{
-      const v=snap.val();if(!v||!v.tasks)return;
-      if(skipFB.current){skipFB.current=false;return}
-      setTasks(autoArc(v.tasks));setComp(v.completed||{});setSkip(v.skipped||{});
-      if(v.notified)ntfSet.current=new Set(v.notified);
-      sL(v);setSynced(true);
-    })}catch(e){}
+    
+    const local = lL();
+    const lTs = local?.ts || 0;
+
+    // 1) Leer la nube UNA vez antes de activar el listener
+    dataRef.once('value').then(snap => {
+      const remote = snap.val();
+      const rTs = remote?.ts || 0;
+
+      // Si hay diferencia mayor a 10 segs, lanzar confirmación
+      if (remote && local && lTs > 0 && rTs > 0 && Math.abs(lTs - rTs) > 10000) {
+        setConflict({ local, remote });
+        setLoading(false);
+      } else if (remote && rTs >= lTs) {
+        // La nube es más nueva o igual, usar nube
+        applyData(remote);
+        isResolving.current = false;
+      } else if (local && lTs > rTs) {
+        // Local es más nuevo (offline edits), forzar update a la nube
+        applyData(local);
+        isResolving.current = false;
+        markDirty(); 
+      } else {
+        // Primera vez en ambos
+        const seedData = { tasks: SEED, completed: {}, skipped: {}, notified: [], ts: Date.now() };
+        applyData(seedData);
+        isResolving.current = false;
+        markDirty();
+      }
+
+      // 2) Activar listener para el futuro
+      dataRef.on('value', rSnap => {
+        if (skipFB.current || isResolving.current) { skipFB.current = false; return; }
+        const v = rSnap.val();
+        if (v && v.ts > (lL()?.ts || 0)) {
+          applyData(v);
+        }
+      });
+    }).catch(() => {
+      // Modo offline fallback
+      if (local) applyData(local);
+      isResolving.current = false;
+    });
+
     try{db.ref('.info/connected').on('value',s=>{setSynced(!!s.val())})}catch(e){}
     if('Notification' in window&&Notification.permission==='granted')setNOn(true);
   },[]);
+
+  // ═══ SAVE ═══
+  useEffect(()=>{
+    // Solo guardar si terminó de resolver conflictos y si hubo una acción del usuario
+    if(loading || tasks.length === 0 || isResolving.current || !isDirty.current) return;
+    
+    isDirty.current = false; // Resetear la bandera
+    const d={tasks,completed:comp,skipped:skip,notified:[...ntfSet.current],ts:Date.now()};
+    sL(d);
+    skipFB.current=true;
+    try { dataRef.update(d); } catch(e) {} // Usando update() como pediste
+  },[tasks,comp,skip,loading]);
 
   // ═══ SAVE ═══
   useEffect(()=>{
@@ -189,17 +242,17 @@ function App(){
     return r;
   },[tOk,res,tasks,ceT]);
 
-  // Actions
-  const doC=id=>{setComp(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setSkip(p=>{const n={...p};delete n[id];return n})};
-  const doS=id=>{setSkip(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setComp(p=>{const n={...p};delete n[id];return n})};
-  const endD=()=>{setComp({});setSkip({});setCEnd(false);ntfSet.current.clear()};
-  const delT=id=>{setTasks(p=>p.filter(t=>t.id!==id).map(t=>t.dependsOn===id?{...t,dependsOn:null}:t));setComp(p=>{const n={...p};delete n[id];return n});setSkip(p=>{const n={...p};delete n[id];return n});setCDel(null)};
-  const svT=td=>{if(td.id)setTasks(p=>p.map(t=>t.id===td.id?td:t));else setTasks(p=>[...p,{...td,id:gid(),order:p.length}]);setEditing(null)};
-  const uN=(id,notes)=>setTasks(p=>p.map(t=>t.id===id?{...t,notes}:t));
-  const arT=id=>setTasks(p=>p.map(t=>t.id===id?{...t,archived:true}:t));
-  const unT=id=>setTasks(p=>p.map(t=>t.id===id?{...t,archived:false}:t));
-  const mvT=(id,dir)=>{setTasks(p=>{const i=p.findIndex(t=>t.id===id);if(i<0)return p;const j=dir==='up'?i-1:i+1;if(j<0||j>=p.length)return p;const n=[...p];const tmp=n[i].order;n[i]={...n[i],order:n[j].order};n[j]={...n[j],order:tmp};[n[i],n[j]]=[n[j],n[i]];return n})};
-
+ // Actions
+  const doC=id=>{ markDirty(); setComp(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setSkip(p=>{const n={...p};delete n[id];return n})};
+  const doS=id=>{ markDirty(); setSkip(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setComp(p=>{const n={...p};delete n[id];return n})};
+  const endD=()=>{ markDirty(); setComp({});setSkip({});setCEnd(false);ntfSet.current.clear()};
+  const delT=id=>{ markDirty(); setTasks(p=>p.filter(t=>t.id!==id).map(t=>t.dependsOn===id?{...t,dependsOn:null}:t));setComp(p=>{const n={...p};delete n[id];return n});setSkip(p=>{const n={...p};delete n[id];return n});setCDel(null)};
+  const svT=td=>{ markDirty(); if(td.id)setTasks(p=>p.map(t=>t.id===td.id?td:t));else setTasks(p=>[...p,{...td,id:gid(),order:p.length}]);setEditing(null)};
+  const uN=(id,notes)=>{ markDirty(); setTasks(p=>p.map(t=>t.id===id?{...t,notes}:t));};
+  const arT=id=>{ markDirty(); setTasks(p=>p.map(t=>t.id===id?{...t,archived:true}:t));};
+  const unT=id=>{ markDirty(); setTasks(p=>p.map(t=>t.id===id?{...t,archived:false}:t));};
+  const mvT=(id,dir)=>{ markDirty(); setTasks(p=>{const i=p.findIndex(t=>t.id===id);if(i<0)return p;const j=dir==='up'?i-1:i+1;if(j<0||j>=p.length)return p;const n=[...p];const tmp=n[i].order;n[i]={...n[i],order:n[j].order};n[j]={...n[j],order:tmp};[n[i],n[j]]=[n[j],n[i]];return n})};
+  
   // Computed
   const dayT=tasks.filter(t=>!t.archived&&isAct(t)&&(t.category==='core'||t.category==='event'||t.category===mode))
     .sort((a,b)=>{const at=a.timeCondition?toM(a.timeCondition.time):9999,bt=b.timeCondition?toM(b.timeCondition.time):9999;return at!==bt?at-bt:a.order-b.order});
@@ -316,6 +369,24 @@ function App(){
       h('button',{style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3,padding:'10px 0',background:'none',border:'none',color:tab==='day'?'#f59e0b':'#475569',cursor:'pointer',fontFamily:F},onClick:()=>setTab('day')},h(IC.Cal),h('span',{style:{fontSize:11,fontWeight:600}},'My Day')),
       h('button',{style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3,padding:'10px 0',background:'none',border:'none',color:tab==='admin'?'#f59e0b':'#475569',cursor:'pointer',fontFamily:F},onClick:()=>setTab('admin')},h(IC.Gear),h('span',{style:{fontSize:11,fontWeight:600}},'Manage'))),
     // Modals
+    conflict&&h(Confirm,{
+      title:'⚠️ Conflicto de Datos',
+      msg:'Este dispositivo tiene datos distintos a los de la nube. ¿Cuáles deseas usar?',
+      onOk:()=>{
+        applyData(conflict.local);
+        isResolving.current=false;
+        setConflict(null);
+        markDirty(); // Forzamos guardar el local en la nube
+      },
+      onNo:()=>{
+        applyData(conflict.remote);
+        isResolving.current=false;
+        setConflict(null);
+      },
+      okLbl:'Usar Local',
+      noLbl:'Usar Nube',
+      okClr:'#f59e0b'
+    }),
     editing!==null&&h(TaskForm,{task:editing==='new'?null:editing,allTasks:tasks,onSave:svT,onClose:()=>setEditing(null)}),
     viewing!==null&&h(DetailSheet,{task:viewing,dispName:dN(viewing),onClose:()=>setViewing(null),onUpdateNotes:n=>{uN(viewing.id,n);setViewing({...viewing,notes:n})}}),
     cEnd&&h(Confirm,{title:'End Day',msg:'Reset all progress?',onOk:endD,onNo:()=>setCEnd(false),okLbl:'Reset',okClr:'#f59e0b'}),
@@ -394,13 +465,13 @@ function TaskForm({task,allTasks,onSave,onClose}){
 }
 
 // ═══ CONFIRM ═══
-function Confirm({title,msg,onOk,onNo,okLbl,okClr}){
+function Confirm({title,msg,onOk,onNo,okLbl,noLbl,okClr}){
   return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center',zIndex:200,padding:16},onClick:onNo},
     h('div',{style:{width:'100%',maxWidth:340,background:'#1e293b',borderRadius:20,padding:'24px 20px'},onClick:e=>e.stopPropagation()},
       h('h2',{style:{fontSize:18,fontWeight:700,color:'#f8fafc',margin:'0 0 20px'}},title),
       h('p',{style:{fontSize:14,color:'#94a3b8',lineHeight:1.5,margin:'0 0 20px'}},msg),
       h('div',{style:{display:'flex',gap:10}},
-        h('button',{style:{flex:1,padding:14,background:'#0f172a',border:'1px solid #334155',borderRadius:12,color:'#94a3b8',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:F},onClick:onNo},'Cancel'),
+        h('button',{style:{flex:1,padding:14,background:'#0f172a',border:'1px solid #334155',borderRadius:12,color:'#94a3b8',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:F},onClick:onNo}, noLbl || 'Cancel'),
         h('button',{style:{flex:1,padding:14,background:okClr,border:'none',borderRadius:12,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:F},onClick:onOk},okLbl))));
 }
 
