@@ -313,7 +313,7 @@ function App(){
             task.isGoal&&h('span',{style:{fontSize:8,color:'#fbbf24'}},'🎯'),
             subs.length>0&&h('button',{style:{fontSize:9,color:'#475569',background:'none',border:'none',cursor:'pointer',padding:'0 4px'},onClick:e=>{e.stopPropagation();setCollSubs(p=>({...p,[task.id]:!p[task.id]}))}},subsColl?'▸ '+subs.length+' sub':'▾ '+subs.length+' sub')),
           h('div',{style:{display:'flex',flexWrap:'wrap',gap:4,marginTop:1}},
-            at&&h('span',{style:{fontSize:9,color:'#64748b'}},at),task.project&&h('span',{style:{fontSize:9,color:'#475569'}},task.project))),
+            at&&h('span',{style:{fontSize:9,color:'#64748b'}},at),(task.eventDates||[]).length>0&&h('span',{style:{fontSize:9,color:'#fb7185'}},'📅 '+task.eventDates.join(', ')),task.project&&h('span',{style:{fontSize:9,color:'#475569'}},task.project))),
         h('div',{style:{display:'flex',gap:2,flexShrink:0}},
           h('button',{style:{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',background:'#1e293b',border:'none',borderRadius:5,color:'#60a5fa',cursor:'pointer'},onClick:()=>setEditing(task)},h(IC.Edit)),
           h('button',{style:{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',background:'#1e293b',border:'none',borderRadius:5,color:'#94a3b8',cursor:'pointer'},onClick:()=>dupT(task.id)},h(IC.Copy)),
