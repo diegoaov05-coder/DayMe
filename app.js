@@ -79,7 +79,7 @@ function App(){
 
   const applyData=d=>{
     setTasks(autoArc(d.tasks||[]));setComp(d.completed||{});setSkip(d.skipped||{});
-    if(d.hold)setHold(d.hold);if(d.rewards)setRewards(d.rewards);if(d.inventory)setInventory(d.inventory);
+    if(d.hold)setHold(d.hold);if(d.rewards&&d.rewards.length>0)setRewards(d.rewards);if(d.inventory)setInventory(d.inventory);
     if(d.notified)ntfSet.current=new Set(d.notified);sL(d);setLoading(false);
   };
 
@@ -149,7 +149,7 @@ function App(){
   const giveReward=(instant)=>{
     if(rewards.length===0)return;
     const rw=rewards[Math.floor(Math.random()*rewards.length)];
-    if(instant){setRewardCeleb(rw);setTimeout(()=>setRewardCeleb(null),4000)}
+    if(instant){setTimeout(()=>{setRewardCeleb(rw);setTimeout(()=>setRewardCeleb(null),3500)},celebBig?3600:100)}
     else{setInventory(p=>[...p,{name:rw.name,type:rw.type}]);markDirty()}
   };
 
