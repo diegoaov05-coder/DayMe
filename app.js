@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-22 v7.1
+// BUILD: 2026-02-22 v7.2
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -103,7 +103,6 @@ function App(){
   const markDirty=()=>{isDirty.current=true};
   useEffect(()=>{localStorage.setItem('myday-mode',mode)},[mode]);
   useEffect(()=>{try{localStorage.setItem('myday-collsubs',JSON.stringify(collSubs))}catch(e){}},[collSubs]);
-  useEffect(()=>{window.scrollTo({top:0,behavior:'instant'})},[tab]);
 
   const applyData=d=>{
     setTasks(autoArc(d.tasks||[]));setComp(d.completed||{});setSkip(d.skipped||{});
@@ -400,7 +399,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':'Manage'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'7.1'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'7.2'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
@@ -410,7 +409,7 @@ function App(){
       h('button',{style:{width:'100%',textAlign:'left',padding:'6px 8px',background:!focusProj?'rgba(168,85,247,0.12)':'none',border:'none',borderRadius:6,color:!focusProj?'#c084fc':'#94a3b8',cursor:'pointer',fontSize:11,fontFamily:F,fontWeight:600},onClick:()=>{setFocusProj(null);setShowFocus(false)}},'All'),
       projects.map(p=>h('button',{key:p,style:{width:'100%',textAlign:'left',padding:'6px 8px',background:focusProj===p?'rgba(168,85,247,0.12)':'none',border:'none',borderRadius:6,color:focusProj===p?'#c084fc':'#94a3b8',cursor:'pointer',fontSize:11,fontFamily:F,fontWeight:600,marginTop:1},onClick:()=>{setFocusProj(p);setShowFocus(false)}},p))),
     // Content
-    h('div',{style:{padding:'10px 14px',paddingBottom:90}},
+    h('div',{ref:el=>{if(el)el.scrollTop=0},key:tab,style:{padding:'10px 14px',paddingBottom:90,overflow:'auto',height:'calc(100vh - 55px - 60px)',WebkitOverflowScrolling:'touch'}},
       tab==='day'?
       h('div',{style:{paddingBottom:80}},
         // Floating inventory button
