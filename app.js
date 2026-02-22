@@ -141,7 +141,12 @@ function App(){
   const rqN=async()=>{if(!('Notification' in window)){setBanner('Not supported');setTimeout(()=>setBanner(null),3000);return}const p=await Notification.requestPermission();if(p==='granted'){setNOn(true);ntfy('🔔','On')}else{setBanner('Denied');setTimeout(()=>setBanner(null),3000)}};
 
   // ═══ LOGIC ═══
-  const resolved=useCallback(id=>!!comp[id]||!!skip[id],[comp,skip]);
+  const resolved=useCallback(id=>{
+    if(comp[id]||skip[id])return true;
+    const subs=tasks.filter(t=>t.parentId===id&&!t.archived);
+    if(subs.length>0)return subs.every(s=>comp[s.id]||skip[s.id]);
+    return false;
+  },[comp,skip,tasks]);
   const isHeld=useCallback(id=>hold[id]&&hold[id]>Date.now(),[hold]);
   const td=getISO(),dw=getDow();
   const isAct=useCallback(t=>{if(t.archived)return false;if(t.category==='event')return toArr(t.eventDates).includes(td);return toArr(t.activeDays||ALL_DAYS).includes(dw)},[td,dw]);
@@ -224,27 +229,25 @@ function App(){
     setDragId(null);setDragOverId(null)};
 
   // ═══ COMPUTED ═══
+  const getO=t=>{if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return(p?p.order||0:9998)+((t.order||0)*0.001)}return t.order||0};
+  
   let dayT=tasks.filter(t=>{if(t.archived||!isAct(t))return false;
     if(tasks.some(c=>c.parentId===t.id&&!c.archived))return false; // parent groups hidden
     if(t.category==='core'||t.category==='event')return true;
     if(t.category!==mode)return false;
     if(focusProj&&t.project!==focusProj)return false;return true;
   }).sort((a,b)=>{
-    // Get effective order: subtasks use parent's order as primary
-    const pOrd=t=>{if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return p?(p.order||0):9998}return 9998};
     const aTime=a.timeCondition?toM(getActTime(a,dw)||'23:59'):9999;
     const bTime=b.timeCondition?toM(getActTime(b,dw)||'23:59'):9999;
-    const aOrd=a.parentId?pOrd(a)+((a.order||0)*0.001):(a.order||0);
-    const bOrd=b.parentId?pOrd(b)+((b.order||0)*0.001):(b.order||0);
-    // Core/event with time sort by time first, then by effective order
+    const aOrd=getO(a);
+    const bOrd=getO(b);
     if(aTime!==bTime&&aTime<9999&&bTime<9999)return aTime-bTime;
     return aOrd-bOrd;
   });
 
   const todayEv=dayT.filter(t=>t.category==='event');
   const nonEv=dayT.filter(t=>t.category!=='event');
-  // FIX: sort by order not time for next task (time-activated tasks respect queue)
-  const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>(a.order||0)-(b.order||0))[0];
+  const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>getO(a)-getO(b))[0];
   // Three sections
   const completedT=nonEv.filter(t=>resolved(t.id));
   const blockedT=nonEv.filter(t=>!resolved(t.id)&&!isUL(t)&&!isHeld(t.id)&&t.timeCondition&&!tOk(t));
