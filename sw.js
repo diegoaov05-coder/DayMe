@@ -1,12 +1,53 @@
-const CACHE='myday-v3';
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/','index.html','manifest.json','app.js'])));self.skipWaiting();});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
-self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;
-  if(!e.request.url.startsWith(self.location.origin)){
-    e.respondWith(fetch(e.request).then(r=>{const c=r.clone();caches.open(CACHE).then(ca=>ca.put(e.request,c));return r;}).catch(()=>caches.match(e.request)));
-    return;
+const CACHE='myday-v6';
+const ASSETS=['/','/index.html','/app.js','/manifest.json'];
+
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting()});
+
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim()});
+
+self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).catch(()=>caches.match('/'))))});
+
+// ═══ BACKGROUND NOTIFICATION CHECK ═══
+// This runs inside the SW even when the page is not visible
+const LK='routine-sync-v6';
+
+function checkNotifications(){
+  try{
+    const raw=self.indexedDB?null:null; // SW can't access localStorage directly
+    // Instead, we rely on messages from the page
+  }catch(e){}
+}
+
+// Listen for messages from the page with notification data
+self.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='SCHEDULE_NOTIFS'){
+    const notifs=e.data.notifs||[];
+    notifs.forEach(n=>{
+      const delay=n.fireAt-Date.now();
+      if(delay>0&&delay<86400000){
+        setTimeout(()=>{
+          self.registration.showNotification(n.title,{
+            body:n.body,
+            tag:n.tag,
+            renotify:true,
+            vibrate:[200,100,200,100,200],
+            requireInteraction:true,
+            icon:'/icon-192.png'
+          });
+        },delay);
+      }
+    });
   }
-  e.respondWith(caches.match(e.request).then(c=>{const f=fetch(e.request).then(r=>{const cl=r.clone();caches.open(CACHE).then(ca=>ca.put(e.request,cl));return r;}).catch(()=>c);return c||f;}));
+  if(e.data&&e.data.type==='CLEAR_NOTIFS'){
+    // Clear scheduled (not possible with setTimeout, but prevents duplicates via tag)
+  }
 });
-self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(l=>{for(const c of l)if(c.url.includes(self.location.origin)&&'focus' in c)return c.focus();return self.clients.openWindow('/');}));});
+
+// Wake up periodically to check (best effort)
+self.addEventListener('periodicsync',e=>{
+  if(e.tag==='check-notifications'){
+    e.waitUntil(self.clients.matchAll().then(clients=>{
+      clients.forEach(c=>c.postMessage({type:'CHECK_NOTIFS'}));
+    }));
+  }
+});
