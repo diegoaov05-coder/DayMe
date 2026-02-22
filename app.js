@@ -140,29 +140,42 @@ function App(){
 
   const rqN=async()=>{if(!('Notification' in window)){setBanner('Not supported');setTimeout(()=>setBanner(null),3000);return}const p=await Notification.requestPermission();if(p==='granted'){setNOn(true);ntfy('🔔','On')}else{setBanner('Denied');setTimeout(()=>setBanner(null),3000)}};
 
-// ═══ LOGIC ═══
-  const td=getISO(),dw=getDow();
-  const resolved=useCallback(id=>!!comp[id]||!!skip[id],[comp,skip]);
-  const isHeld=useCallback(id=>hold[id]&&hold[id]>Date.now(),[hold]);
-  const isAct=useCallback(t=>{if(t.archived)return false;if(t.category==='event')return toArr(t.eventDates).includes(td);return toArr(t.activeDays||ALL_DAYS).includes(dw)},[td,dw]);
-  // EFFECTIVE TIME: Subtasks heredan el horario del padre
-  const getEffTime=useCallback(tk=>{let t=getActTime(tk,dw);if(!t&&tk.parentId){const p=tasks.find(x=>x.id===tk.parentId);if(p)t=getActTime(p,dw)}return t},[tasks,dw]);
-  const ceT=tasks.filter(t=>(t.category==='core'||t.category==='event')&&isAct(t));
-  const tOk=useCallback(t=>{const at=getEffTime(t);return!at||toM(ct)>=toM(at)},[ct,getEffTime]);
-  const dOk=useCallback(tk=>{
-    if(tk.dependsOn&&!resolved(tk.dependsOn))return false;
-    if(tk.category==='work'||tk.category==='personal')if(ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id)).length>0)return false;
-    return true;
-  },[resolved,ceT,tOk,isHeld]);
-  const isUL=useCallback(t=>{if(isHeld(t.id))return false;return tOk(t)&&dOk(t)},[tOk,dOk,isHeld]);
-  const dN=useCallback(t=>{if(!t.timeCondition)return t.name;const tc=t.timeCondition;if(tc.labelSwitchTime&&tc.labelBefore&&tc.labelAfter)return toM(ct)>=toM(tc.labelSwitchTime)?tc.labelAfter:tc.labelBefore;return t.name},[ct]);
-  const bW=useCallback(tk=>{
-    const r=[];if(isHeld(tk.id)){const min=Math.ceil((hold[tk.id]-Date.now())/60000);r.push('⏸ Hold '+min+'min');return r}
-    const at=getEffTime(tk);if(at&&toM(ct)<toM(at))r.push(at);
-    if(tk.dependsOn&&!resolved(tk.dependsOn)){const p=tasks.find(x=>x.id===tk.dependsOn);if(p)r.push('After: '+p.name)}
-    if(tk.category==='work'||tk.category==='personal'){const pn=ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id));if(pn.length)r.push('Pending: '+pn.map(c=>c.name).join(', '))}
-    return r;
-  },[tOk,resolved,tasks,ceT,ct,getEffTime,hold,isHeld]);
+  // ═══ LOGIC ═══
+  // Helper: get children of a parent
+  const childrenOf=useCallback(pid=>tasks.filter(t=>t.parentId===pid&&!t.archived),[tasks]);
+  // Helper: does parent have a goal subtask?
+  const parentHasGoal=useCallback(pid=>tasks.some(t=>t.parentId===pid&&!t.archived&&t.isGoal),[tasks]);
+  // Resolved: task is done/skipped, OR parent with all subtasks resolved
+  const resolved=useCallback(id=>{
+    if(comp[id]||skip[id])return true;
+    const subs=childrenOf(id);
+    if(subs.length>0)return subs.every(s=>!!comp[s.id]||!!skip[s.id]);
+    return false;
+  },[comp,skip,childrenOf]);
+  const isHeld=useCallback(id=>hold[id]&&hold[id]>Date.now(),[hold]);
+  const td=getISO(),dw=getDow();
+  const isAct=useCallback(t=>{if(t.archived)return false;if(t.category==='event')return toArr(t.eventDates).includes(td);return toArr(t.activeDays||ALL_DAYS).includes(dw)},[td,dw]);
+  const ceT=tasks.filter(t=>(t.category==='core'||t.category==='event')&&isAct(t)&&!t.parentId);
+  // Time check: subtasks inherit parent's time
+  const tOk=useCallback(t=>{
+    const tc=t.timeCondition||(t.parentId?tasks.find(p=>p.id===t.parentId)?.timeCondition:null);
+    if(!tc)return true;const at=tc.dayOverrides&&tc.dayOverrides[dw]?tc.dayOverrides[dw]:tc.time;
+    return!at||toM(ct)>=toM(at);
+  },[ct,dw,tasks]);
+  const dOk=useCallback(tk=>{
+    if(tk.dependsOn&&!resolved(tk.dependsOn))return false;
+    if(tk.category==='work'||tk.category==='personal')if(ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id)).length>0)return false;
+    return true;
+  },[resolved,ceT,tOk,isHeld]);
+  const isUL=useCallback(t=>{if(isHeld(t.id))return false;return tOk(t)&&dOk(t)},[tOk,dOk,isHeld]);
+  const dN=useCallback(t=>{if(!t.timeCondition)return t.name;const tc=t.timeCondition;if(tc.labelSwitchTime&&tc.labelBefore&&tc.labelAfter)return toM(ct)>=toM(tc.labelSwitchTime)?tc.labelAfter:tc.labelBefore;return t.name},[ct]);
+  const bW=useCallback(tk=>{
+    const r=[];if(isHeld(tk.id)){const min=Math.ceil((hold[tk.id]-Date.now())/60000);r.push('⏸ Hold '+min+'min');return r}
+    const at=getActTime(tk,dw);if(tk.timeCondition&&at&&toM(ct)<toM(at))r.push(at);
+    if(tk.dependsOn&&!resolved(tk.dependsOn)){const p=tasks.find(x=>x.id===tk.dependsOn);if(p)r.push('After: '+p.name)}
+    if(tk.category==='work'||tk.category==='personal'){const pn=ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id));if(pn.length)r.push('Pending: '+pn.map(c=>c.name).join(', '))}
+    return r;
+  },[tOk,resolved,tasks,ceT,ct,dw,hold,isHeld]);
 
   // ═══ REWARDS LOGIC ═══
   const giveReward=(instant)=>{
@@ -191,26 +204,19 @@ function App(){
   };
 
   // ═══ ACTIONS ═══
-  const doC=id=>{markDirty();const was=!!comp[id];const tk=tasks.find(t=>t.id===id);
-    setComp(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);
-      if(!was&&tk&&tk.parentId){const sibs=tasks.filter(t=>t.parentId===tk.parentId&&t.id!==id&&!t.archived);if(sibs.every(s=>n[s.id]||skip[s.id]))n[tk.parentId]=true}
-      if(was&&tk&&tk.parentId)delete n[tk.parentId];
-      return n});
-    setSkip(p=>{const n={...p};delete n[id];return n});
-    if(!was){setJustDone(id);setTimeout(()=>setJustDone(null),400);
-      if(tk){const isGoalHit=checkGoal(id);
-        if(!isGoalHit){setCeleb('Done!');setCelebBig(false);
-          if((tk.category==='work'||tk.category==='personal')&&isGoalMet(tk.category,id))giveReward(true);
-        }
-      }
-    }
-  };
-  const doS=id=>{markDirty();const tk=tasks.find(t=>t.id===id);const wS=!!skip[id];
-    setSkip(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);
-      if(!wS&&tk&&tk.parentId){const sibs=tasks.filter(t=>t.parentId===tk.parentId&&t.id!==id&&!t.archived);if(sibs.every(s=>comp[s.id]||n[s.id]))n[tk.parentId]=true}
-      if(wS&&tk&&tk.parentId)delete n[tk.parentId];
-      return n});
-    setComp(p=>{const n={...p};delete n[id];return n})};
+  const doC=id=>{markDirty();const was=!!comp[id];
+    setComp(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setSkip(p=>{const n={...p};delete n[id];return n});
+    if(!was){setJustDone(id);setTimeout(()=>setJustDone(null),400);
+      const tk=tasks.find(t=>t.id===id);
+      if(tk){const isGoalHit=checkGoal(id);
+        if(!isGoalHit){setCeleb('Done!');setCelebBig(false);
+          // Bonus: if goal already met, give instant reward
+          if((tk.category==='work'||tk.category==='personal')&&isGoalMet(tk.category,id))giveReward(true);
+        }
+      }
+    }
+  };
+  const doS=id=>{markDirty();setSkip(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setComp(p=>{const n={...p};delete n[id];return n})};
   const doHold=(id,min)=>{markDirty();setHold(p=>({...p,[id]:Date.now()+min*60000}))};
   const doUnhold=id=>{markDirty();setHold(p=>{const n={...p};delete n[id];return n})};
   const endD=()=>{markDirty();setComp({});setSkip({});setHold({});setInventory([]);setCEnd(false);ntfSet.current.clear();remSet.current.clear()};
@@ -232,26 +238,34 @@ function App(){
       return[...rest.map((t,i)=>({...t,order:i})),...ot]});
     setDragId(null);setDragOverId(null)};
 
-// ═══ COMPUTED ═══
-  const getO=t=>{if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return(p?p.order||0:9998)+((t.order||0)*0.001)}return t.order||0};
-  let dayT=tasks.filter(t=>{if(t.archived||!isAct(t))return false;
-    if(tasks.some(c=>c.parentId===t.id&&!c.archived))return false; // parent groups hidden
-    if(t.category==='core'||t.category==='event')return true;
-    if(t.category!==mode)return false;
-    if(focusProj&&t.project!==focusProj)return false;return true;
-  }).sort((a,b)=>{
-    const aT=getEffTime(a),bT=getEffTime(b);
-    const aTime=aT?toM(aT):9999;
-    const bTime=bT?toM(bT):9999;
-    const aOrd=getO(a);
-    const bOrd=getO(b);
-    if(aTime!==bTime&&aTime<9999&&bTime<9999)return aTime-bTime;
-    return aOrd-bOrd;
-  });
+  // ═══ COMPUTED ═══
+  let dayT=tasks.filter(t=>{if(t.archived||!isAct(t))return false;
+    if(tasks.some(c=>c.parentId===t.id&&!c.archived))return false; // parent groups hidden
+    if(t.category==='core'||t.category==='event')return true;
+    if(t.category!==mode)return false;
+    if(focusProj&&t.project!==focusProj)return false;return true;
+  }).sort((a,b)=>{
+    // Effective order: subtasks get parent.order + fraction so they stay grouped after parent position
+    const effOrd=t=>{
+      if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return(p?p.order||0:0)+(t.order||0)*0.001}
+      return t.order||0;
+    };
+    const aTime=a.timeCondition||(a.parentId?tasks.find(p=>p.id===a.parentId)?.timeCondition:null);
+    const bTime=b.timeCondition||(b.parentId?tasks.find(p=>p.id===b.parentId)?.timeCondition:null);
+    const aT=aTime?toM(getActTime(a,dw)||(aTime.dayOverrides&&aTime.dayOverrides[dw])||aTime.time||'23:59'):9999;
+    const bT=bTime?toM(getActTime(b,dw)||(bTime.dayOverrides&&bTime.dayOverrides[dw])||bTime.time||'23:59'):9999;
+    if(aT!==bT&&aT<9999&&bT<9999)return aT-bT;
+    return effOrd(a)-effOrd(b);
+  });
 
-  const todayEv=dayT.filter(t=>t.category==='event');
-  const nonEv=dayT.filter(t=>t.category!=='event');
-  const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>getO(a)-getO(b))[0];
+  const todayEv=dayT.filter(t=>t.category==='event');
+  const nonEv=dayT.filter(t=>t.category!=='event');
+  // FIX: sort by order not time for next task (time-activated tasks respect queue)
+  const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>(a.order||0)-(b.order||0))[0];
+  // Three sections
+  const completedT=nonEv.filter(t=>resolved(t.id));
+  const blockedT=nonEv.filter(t=>!resolved(t.id)&&!isUL(t)&&!isHeld(t.id)&&t.timeCondition&&!tOk(t));
+  const aheadT=nonEv.filter(t=>!resolved(t.id)&&t.id!==(nxt?.id)&&!blockedT.find(b=>b.id===t.id));
 
   const rCnt=dayT.filter(t=>resolved(t.id)).length;
   const pct=dayT.length?rCnt/dayT.length:0;
@@ -264,7 +278,7 @@ function App(){
   // ═══ CARD RENDERER ═══
   const rCard=(task,mini)=>{
     const done=!!comp[task.id],isSk=!!skip[task.id],rs=done||isSk,u=isUL(task),hld=isHeld(task.id);
-    const reasons=bW(task),name=dN(task),c=CAT[task.category],isG=task.isGoal,pulsing=justDone===task.id;
+    const reasons=bW(task),name=dN(task),c=CAT[task.category],isG=task.isGoal||parentHasGoal(task.id),pulsing=justDone===task.id;
     const parent=task.parentId?tasks.find(t=>t.id===task.parentId):null;
     return h('div',{key:task.id,style:{display:'flex',alignItems:'flex-start',gap:10,padding:task.parentId?'8px 12px 8px 26px':'10px 12px',background:isG?'linear-gradient(135deg,rgba(16,185,129,0.05),rgba(251,191,36,0.03))':'#111827',borderRadius:10,borderLeft:'3px solid '+c.border,cursor:'pointer',opacity:rs?0.4:(!u&&!rs?0.35:1),transition:'opacity .2s'},onClick:()=>setViewing(task)},
       h('button',{className:pulsing?'cb-pulse':'',style:{width:28,height:28,borderRadius:8,border:done?'2px solid #10b981':isSk?'2px solid #475569':hld?'2px solid #f59e0b':!u?'2px solid #1e293b':'2px solid #334155',background:done?'linear-gradient(135deg,#10b981,#059669)':isSk?'rgba(100,116,139,0.3)':hld?'rgba(245,158,11,0.15)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:!u&&!hld?'not-allowed':'pointer',flexShrink:0,color:done?'#fff':isSk?'#94a3b8':hld?'#f59e0b':'transparent',transition:'all .2s'},onClick:e=>{e.stopPropagation();if(hld)return;(u||rs)&&doC(task.id)}},
@@ -414,6 +428,17 @@ function App(){
               h('span',{style:{fontSize:10,marginLeft:3,display:'inline-block',transform:coll?'rotate(-90deg)':'rotate(0)',transition:'transform .2s'}},'▾')),
             !coll&&list.sort((a,b)=>a.order-b.order).map(t=>aRow(t,cat,false)))
         }),
+        // Event calendar
+        (()=>{const evts=tasks.filter(t=>t.category==='event'&&!t.archived);if(!evts.length)return null;
+          const allDates=[];evts.forEach(t=>toArr(t.eventDates).forEach(d=>allDates.push({date:d,name:t.name,time:getActTime(t,dw)||'',id:t.id})));
+          allDates.sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time));
+          return h('div',{style:{marginTop:16,background:'#111827',borderRadius:12,padding:'12px 14px',border:'1px solid rgba(244,63,94,0.15)'}},
+            h('div',{style:{fontSize:12,fontWeight:700,color:'#fb7185',marginBottom:8}},'📅 Cronograma de Eventos'),
+            allDates.length===0?h('div',{style:{fontSize:11,color:'#475569',fontStyle:'italic'}},'Sin fechas'):
+            allDates.map((ev,i)=>h('div',{key:i,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:i<allDates.length-1?'1px solid #1e293b':'none'}},
+              h('span',{style:{fontSize:11,color:'#fb7185',fontWeight:700,minWidth:75,fontFamily:'monospace'}},ev.date),
+              ev.time&&h('span',{style:{fontSize:10,color:'#64748b',minWidth:36}},ev.time),
+              h('span',{style:{fontSize:11,color:'#e2e8f0'}},ev.name))))})(),
         // Rewards config section
         h('div',{style:{marginTop:20,borderTop:'1px solid #1e293b',paddingTop:16}},
           h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}},
