@@ -140,32 +140,29 @@ function App(){
 
   const rqN=async()=>{if(!('Notification' in window)){setBanner('Not supported');setTimeout(()=>setBanner(null),3000);return}const p=await Notification.requestPermission();if(p==='granted'){setNOn(true);ntfy('🔔','On')}else{setBanner('Denied');setTimeout(()=>setBanner(null),3000)}};
 
-  // ═══ LOGIC ═══
-  const resolved=useCallback(id=>{
-    if(comp[id]||skip[id])return true;
-    const subs=tasks.filter(t=>t.parentId===id&&!t.archived);
-    if(subs.length>0)return subs.every(s=>comp[s.id]||skip[s.id]);
-    return false;
-  },[comp,skip,tasks]);
-  const isHeld=useCallback(id=>hold[id]&&hold[id]>Date.now(),[hold]);
-  const td=getISO(),dw=getDow();
-  const isAct=useCallback(t=>{if(t.archived)return false;if(t.category==='event')return toArr(t.eventDates).includes(td);return toArr(t.activeDays||ALL_DAYS).includes(dw)},[td,dw]);
-  const ceT=tasks.filter(t=>(t.category==='core'||t.category==='event')&&isAct(t));
-  const tOk=useCallback(t=>{if(!t.timeCondition)return true;const at=getActTime(t,dw);return!at||toM(ct)>=toM(at)},[ct,dw]);
-  const dOk=useCallback(tk=>{
-    if(tk.dependsOn&&!resolved(tk.dependsOn))return false;
-    if(tk.category==='work'||tk.category==='personal')if(ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id)).length>0)return false;
-    return true;
-  },[resolved,ceT,tOk,isHeld]);
-  const isUL=useCallback(t=>{if(isHeld(t.id))return false;return tOk(t)&&dOk(t)},[tOk,dOk,isHeld]);
-  const dN=useCallback(t=>{if(!t.timeCondition)return t.name;const tc=t.timeCondition;if(tc.labelSwitchTime&&tc.labelBefore&&tc.labelAfter)return toM(ct)>=toM(tc.labelSwitchTime)?tc.labelAfter:tc.labelBefore;return t.name},[ct]);
-  const bW=useCallback(tk=>{
-    const r=[];if(isHeld(tk.id)){const min=Math.ceil((hold[tk.id]-Date.now())/60000);r.push('⏸ Hold '+min+'min');return r}
-    const at=getActTime(tk,dw);if(tk.timeCondition&&at&&toM(ct)<toM(at))r.push(at);
-    if(tk.dependsOn&&!resolved(tk.dependsOn)){const p=tasks.find(x=>x.id===tk.dependsOn);if(p)r.push('After: '+p.name)}
-    if(tk.category==='work'||tk.category==='personal'){const pn=ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id));if(pn.length)r.push('Pending: '+pn.map(c=>c.name).join(', '))}
-    return r;
-  },[tOk,resolved,tasks,ceT,ct,dw,hold,isHeld]);
+// ═══ LOGIC ═══
+  const td=getISO(),dw=getDow();
+  const resolved=useCallback(id=>!!comp[id]||!!skip[id],[comp,skip]);
+  const isHeld=useCallback(id=>hold[id]&&hold[id]>Date.now(),[hold]);
+  const isAct=useCallback(t=>{if(t.archived)return false;if(t.category==='event')return toArr(t.eventDates).includes(td);return toArr(t.activeDays||ALL_DAYS).includes(dw)},[td,dw]);
+  // EFFECTIVE TIME: Subtasks heredan el horario del padre
+  const getEffTime=useCallback(tk=>{let t=getActTime(tk,dw);if(!t&&tk.parentId){const p=tasks.find(x=>x.id===tk.parentId);if(p)t=getActTime(p,dw)}return t},[tasks,dw]);
+  const ceT=tasks.filter(t=>(t.category==='core'||t.category==='event')&&isAct(t));
+  const tOk=useCallback(t=>{const at=getEffTime(t);return!at||toM(ct)>=toM(at)},[ct,getEffTime]);
+  const dOk=useCallback(tk=>{
+    if(tk.dependsOn&&!resolved(tk.dependsOn))return false;
+    if(tk.category==='work'||tk.category==='personal')if(ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id)).length>0)return false;
+    return true;
+  },[resolved,ceT,tOk,isHeld]);
+  const isUL=useCallback(t=>{if(isHeld(t.id))return false;return tOk(t)&&dOk(t)},[tOk,dOk,isHeld]);
+  const dN=useCallback(t=>{if(!t.timeCondition)return t.name;const tc=t.timeCondition;if(tc.labelSwitchTime&&tc.labelBefore&&tc.labelAfter)return toM(ct)>=toM(tc.labelSwitchTime)?tc.labelAfter:tc.labelBefore;return t.name},[ct]);
+  const bW=useCallback(tk=>{
+    const r=[];if(isHeld(tk.id)){const min=Math.ceil((hold[tk.id]-Date.now())/60000);r.push('⏸ Hold '+min+'min');return r}
+    const at=getEffTime(tk);if(at&&toM(ct)<toM(at))r.push(at);
+    if(tk.dependsOn&&!resolved(tk.dependsOn)){const p=tasks.find(x=>x.id===tk.dependsOn);if(p)r.push('After: '+p.name)}
+    if(tk.category==='work'||tk.category==='personal'){const pn=ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id));if(pn.length)r.push('Pending: '+pn.map(c=>c.name).join(', '))}
+    return r;
+  },[tOk,resolved,tasks,ceT,ct,getEffTime,hold,isHeld]);
 
   // ═══ REWARDS LOGIC ═══
   const giveReward=(instant)=>{
@@ -194,19 +191,26 @@ function App(){
   };
 
   // ═══ ACTIONS ═══
-  const doC=id=>{markDirty();const was=!!comp[id];
-    setComp(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setSkip(p=>{const n={...p};delete n[id];return n});
-    if(!was){setJustDone(id);setTimeout(()=>setJustDone(null),400);
-      const tk=tasks.find(t=>t.id===id);
-      if(tk){const isGoalHit=checkGoal(id);
-        if(!isGoalHit){setCeleb('Done!');setCelebBig(false);
-          // Bonus: if goal already met, give instant reward
-          if((tk.category==='work'||tk.category==='personal')&&isGoalMet(tk.category,id))giveReward(true);
-        }
-      }
-    }
-  };
-  const doS=id=>{markDirty();setSkip(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setComp(p=>{const n={...p};delete n[id];return n})};
+  const doC=id=>{markDirty();const was=!!comp[id];const tk=tasks.find(t=>t.id===id);
+    setComp(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);
+      if(!was&&tk&&tk.parentId){const sibs=tasks.filter(t=>t.parentId===tk.parentId&&t.id!==id&&!t.archived);if(sibs.every(s=>n[s.id]||skip[s.id]))n[tk.parentId]=true}
+      if(was&&tk&&tk.parentId)delete n[tk.parentId];
+      return n});
+    setSkip(p=>{const n={...p};delete n[id];return n});
+    if(!was){setJustDone(id);setTimeout(()=>setJustDone(null),400);
+      if(tk){const isGoalHit=checkGoal(id);
+        if(!isGoalHit){setCeleb('Done!');setCelebBig(false);
+          if((tk.category==='work'||tk.category==='personal')&&isGoalMet(tk.category,id))giveReward(true);
+        }
+      }
+    }
+  };
+  const doS=id=>{markDirty();const tk=tasks.find(t=>t.id===id);const wS=!!skip[id];
+    setSkip(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);
+      if(!wS&&tk&&tk.parentId){const sibs=tasks.filter(t=>t.parentId===tk.parentId&&t.id!==id&&!t.archived);if(sibs.every(s=>comp[s.id]||n[s.id]))n[tk.parentId]=true}
+      if(wS&&tk&&tk.parentId)delete n[tk.parentId];
+      return n});
+    setComp(p=>{const n={...p};delete n[id];return n})};
   const doHold=(id,min)=>{markDirty();setHold(p=>({...p,[id]:Date.now()+min*60000}))};
   const doUnhold=id=>{markDirty();setHold(p=>{const n={...p};delete n[id];return n})};
   const endD=()=>{markDirty();setComp({});setSkip({});setHold({});setInventory([]);setCEnd(false);ntfSet.current.clear();remSet.current.clear()};
@@ -228,30 +232,26 @@ function App(){
       return[...rest.map((t,i)=>({...t,order:i})),...ot]});
     setDragId(null);setDragOverId(null)};
 
-  // ═══ COMPUTED ═══
-  const getO=t=>{if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return(p?p.order||0:9998)+((t.order||0)*0.001)}return t.order||0};
-  
-  let dayT=tasks.filter(t=>{if(t.archived||!isAct(t))return false;
-    if(tasks.some(c=>c.parentId===t.id&&!c.archived))return false; // parent groups hidden
-    if(t.category==='core'||t.category==='event')return true;
-    if(t.category!==mode)return false;
-    if(focusProj&&t.project!==focusProj)return false;return true;
-  }).sort((a,b)=>{
-    const aTime=a.timeCondition?toM(getActTime(a,dw)||'23:59'):9999;
-    const bTime=b.timeCondition?toM(getActTime(b,dw)||'23:59'):9999;
-    const aOrd=getO(a);
-    const bOrd=getO(b);
-    if(aTime!==bTime&&aTime<9999&&bTime<9999)return aTime-bTime;
-    return aOrd-bOrd;
-  });
+// ═══ COMPUTED ═══
+  const getO=t=>{if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return(p?p.order||0:9998)+((t.order||0)*0.001)}return t.order||0};
+  let dayT=tasks.filter(t=>{if(t.archived||!isAct(t))return false;
+    if(tasks.some(c=>c.parentId===t.id&&!c.archived))return false; // parent groups hidden
+    if(t.category==='core'||t.category==='event')return true;
+    if(t.category!==mode)return false;
+    if(focusProj&&t.project!==focusProj)return false;return true;
+  }).sort((a,b)=>{
+    const aT=getEffTime(a),bT=getEffTime(b);
+    const aTime=aT?toM(aT):9999;
+    const bTime=bT?toM(bT):9999;
+    const aOrd=getO(a);
+    const bOrd=getO(b);
+    if(aTime!==bTime&&aTime<9999&&bTime<9999)return aTime-bTime;
+    return aOrd-bOrd;
+  });
 
-  const todayEv=dayT.filter(t=>t.category==='event');
-  const nonEv=dayT.filter(t=>t.category!=='event');
-  const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>getO(a)-getO(b))[0];
-  // Three sections
-  const completedT=nonEv.filter(t=>resolved(t.id));
-  const blockedT=nonEv.filter(t=>!resolved(t.id)&&!isUL(t)&&!isHeld(t.id)&&t.timeCondition&&!tOk(t));
-  const aheadT=nonEv.filter(t=>!resolved(t.id)&&t.id!==(nxt?.id)&&!blockedT.find(b=>b.id===t.id));
+  const todayEv=dayT.filter(t=>t.category==='event');
+  const nonEv=dayT.filter(t=>t.category!=='event');
+  const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>getO(a)-getO(b))[0];
 
   const rCnt=dayT.filter(t=>resolved(t.id)).length;
   const pct=dayT.length?rCnt/dayT.length:0;
