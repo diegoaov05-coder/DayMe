@@ -285,7 +285,7 @@ function App(){
       h('button',{className:pulsing?'cb-pulse':'',style:{width:28,height:28,borderRadius:8,border:done?'2px solid #10b981':isSk?'2px solid #475569':hld?'2px solid #f59e0b':!u?'2px solid #1e293b':'2px solid #334155',background:done?'linear-gradient(135deg,#10b981,#059669)':isSk?'rgba(100,116,139,0.3)':hld?'rgba(245,158,11,0.15)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:!u&&!hld?'not-allowed':'pointer',flexShrink:0,color:done?'#fff':isSk?'#94a3b8':hld?'#f59e0b':'transparent',transition:'all .2s'},onClick:e=>{e.stopPropagation();if(hld)return;(u||rs)&&doC(task.id)}},
         done&&h(IC.Check),isSk&&h(IC.X),hld&&h(IC.Pause),!u&&!rs&&!hld&&h(IC.Lock)),
       h('div',{style:{flex:1,minWidth:0}},
-        parent&&h('div',{style:{fontSize:9,color:'#475569',marginBottom:1}},'↳ '+parent.name+(parentHasGoal(parent.id)?' 🎯':'')),
+        parent&&h('div',{style:{fontSize:9,color:'#475569',marginBottom:1}},'↳ '+parent.name),
         h('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}},
           h('span',{style:{fontSize:13,fontWeight:600,color:done||isSk?'#64748b':hld?'#f59e0b':!u?'#475569':'#e2e8f0',textDecoration:rs?'line-through':'none',fontStyle:isSk?'italic':'normal'}},name),
           !task.parentId&&!mini&&h('span',{style:{fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:4,border:'1px solid '+c.border,background:c.bg,color:c.text,textTransform:'uppercase'}},c.label),
@@ -337,7 +337,7 @@ function App(){
 
     const nameRow=h('div',{style:{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}},
       h('span',{style:{fontSize:12,fontWeight:600,color:done?'#64748b':'#e2e8f0',textDecoration:done?'line-through':'none'}},task.name),
-      task.isGoal?h('span',{style:{fontSize:8,color:'#fbbf24'}},'🎯'):null,
+      (task.isGoal||parentHasGoal(task.id))?h('span',{style:{fontSize:8,color:'#fbbf24'}},'🎯'):null,
       subs.length>0?h('button',{style:{fontSize:9,color:'#475569',background:'none',border:'none',cursor:'pointer',padding:'0 4px'},onClick:e=>{e.stopPropagation();setCollSubs(p=>({...p,[task.id]:!p[task.id]}))}},subsColl?'▸ '+subs.length+' sub':'▾ '+subs.length+' sub'):null);
 
     const infoRow=chips.length>0?h('div',{style:{display:'flex',flexWrap:'wrap',gap:4,marginTop:2}},chips):null;
