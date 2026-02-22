@@ -51,7 +51,7 @@ function App(){
   const[showAr,setShowAr]=useState(false);
   const[synced,setSynced]=useState(false);
   const[conflict,setConflict]=useState(null);
-  const[celeb,setCeleb]=useState(null);
+  const[celeb,setCeleb]=useState(null); // {text,big}
   const[celebBig,setCelebBig]=useState(false);
   const[collCats,setCollCats]=useState({});
   const[justDone,setJustDone]=useState(null);
@@ -156,17 +156,12 @@ function App(){
   };
 
   // Goal check with rewards
-  const checkGoal=(taskId,cat)=>{
-    const catT=tasks.filter(t=>!t.archived&&isAct(t)&&t.category===cat).sort((a,b)=>a.order-b.order);
-    const goal=catT.find(t=>t.isGoal);if(!goal)return false;
-    const idx=catT.indexOf(goal);const upTo=catT.slice(0,idx+1);
-    if(upTo.every(t=>t.id===taskId||resolved(t.id))&&taskId===goal.id){
-      setCeleb('🎯 ¡META CUMPLIDA!');setCelebBig(true);
-      // Reward after celebration ends
-      setTimeout(()=>{if(mode==='work')giveReward(false);else giveReward(true)},4600);
-      return true;
-    }
-    return false;
+  const checkGoal=(taskId)=>{
+    const goal=tasks.find(t=>t.isGoal&&!t.archived&&t.id===taskId);
+    if(!goal){return false}
+    setCelebBig(true);setCeleb('🎯 ¡META CUMPLIDA!');
+    setTimeout(()=>{if(mode==='work')giveReward(false);else giveReward(true)},4600);
+    return true;
   };
 
   // Check if goal already met (for bonus rewards)
@@ -181,7 +176,7 @@ function App(){
     setComp(p=>{const n={...p};n[id]?delete n[id]:(n[id]=true);return n});setSkip(p=>{const n={...p};delete n[id];return n});
     if(!was){setJustDone(id);setTimeout(()=>setJustDone(null),400);
       const tk=tasks.find(t=>t.id===id);
-      if(tk){const isGoalHit=checkGoal(id,tk.category);
+      if(tk){const isGoalHit=checkGoal(id);
         if(!isGoalHit){setCeleb('Done!');setCelebBig(false);
           // Bonus: if goal already met, give instant reward
           if((tk.category==='work'||tk.category==='personal')&&isGoalMet(tk.category,id))giveReward(true);
