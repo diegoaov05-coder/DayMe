@@ -64,7 +64,7 @@ function App(){
   const[showCompleted,setShowCompleted]=useState(true);
   const[showBlocked,setShowBlocked]=useState(true);
   const[showAhead,setShowAhead]=useState(true);
-  const[collSubs,setCollSubs]=useState({}); // collapsed subtask groups
+  const[collSubs,setCollSubs]=useState(()=>{try{const s=localStorage.getItem('myday-collsubs');return s?JSON.parse(s):{}}catch(e){return{}}});
   // Rewards system
   const[rewards,setRewards]=useState([]); // [{id,name,type:'micro'|'macro'}]
   const[inventory,setInventory]=useState([]); // [{name,type}] earned today
@@ -77,6 +77,7 @@ function App(){
   const isResolving=useRef(true);const isDirty=useRef(false);
   const markDirty=()=>{isDirty.current=true};
   useEffect(()=>{localStorage.setItem('myday-mode',mode)},[mode]);
+  useEffect(()=>{try{localStorage.setItem('myday-collsubs',JSON.stringify(collSubs))}catch(e){}},[collSubs]);
 
   const applyData=d=>{
     setTasks(autoArc(d.tasks||[]));setComp(d.completed||{});setSkip(d.skipped||{});
@@ -119,6 +120,20 @@ function App(){
         if(tk.category==='core'&&!(tk.activeDays||[]).includes(dw))return;if(tk.category==='event'&&!(tk.eventDates||[]).includes(td))return;
         const tM=toM(at);if(nm>=tM&&nm<=tM+2){ntfy(tk.category==='event'?'📅':'⏰',tk.name,tk.id);setBanner(tk.name);setTimeout(()=>setBanner(null),5000);ntfSet.current.add(tk.id)}})};
     tick();const iv=setInterval(tick,10000);const onV=()=>{if(!document.hidden)tick()};document.addEventListener('visibilitychange',onV);
+    // Schedule notifications in SW for background delivery
+    if(swReg&&nOn){try{
+      const now=new Date(),td=getISO(),dw=getDow(),notifs=[];
+      tasks.forEach(tk=>{if(tk.archived||!tk.timeCondition||comp[tk.id]||skip[tk.id])return;
+        const at=getActTime(tk,dw);if(!at)return;
+        if(tk.category==='core'&&!(tk.activeDays||[]).includes(dw))return;
+        if(tk.category==='event'&&!(tk.eventDates||[]).includes(td))return;
+        const[h,m]=at.split(':').map(Number);const fire=new Date(now);fire.setHours(h,m,0,0);
+        if(fire>now)notifs.push({title:tk.category==='event'?'📅 Event':'⏰ '+tk.name,body:at,tag:tk.id,fireAt:fire.getTime()});
+        if(tk.category==='event'&&(tk.reminderMin||0)>0){const rf=new Date(fire.getTime()-tk.reminderMin*60000);
+          if(rf>now)notifs.push({title:'📅 '+tk.name+' en '+tk.reminderMin+'min',body:at,tag:tk.id+'_r',fireAt:rf.getTime()})}
+      });
+      if(notifs.length>0&&swReg.active)swReg.active.postMessage({type:'SCHEDULE_NOTIFS',notifs});
+    }catch(e){}}
     return()=>{clearInterval(iv);document.removeEventListener('visibilitychange',onV)};
   },[tasks,comp,skip,nOn]);
 
@@ -213,7 +228,17 @@ function App(){
     if(t.category==='core'||t.category==='event')return true;
     if(t.category!==mode)return false;
     if(focusProj&&t.project!==focusProj)return false;return true;
-  }).sort((a,b)=>{const at=a.timeCondition?toM(getActTime(a,dw)||'23:59'):9999;const bt=b.timeCondition?toM(getActTime(b,dw)||'23:59'):9999;return at!==bt?at-bt:(a.order||0)-(b.order||0)});
+  }).sort((a,b)=>{
+    // Get effective order: subtasks use parent's order as primary
+    const pOrd=t=>{if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return p?(p.order||0):9998}return 9998};
+    const aTime=a.timeCondition?toM(getActTime(a,dw)||'23:59'):9999;
+    const bTime=b.timeCondition?toM(getActTime(b,dw)||'23:59'):9999;
+    const aOrd=a.parentId?pOrd(a)+((a.order||0)*0.001):(a.order||0);
+    const bOrd=b.parentId?pOrd(b)+((b.order||0)*0.001):(b.order||0);
+    // Core/event with time sort by time first, then by effective order
+    if(aTime!==bTime&&aTime<9999&&bTime<9999)return aTime-bTime;
+    return aOrd-bOrd;
+  });
 
   const todayEv=dayT.filter(t=>t.category==='event');
   const nonEv=dayT.filter(t=>t.category!=='event');
