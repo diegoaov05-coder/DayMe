@@ -11,8 +11,9 @@ const toM=t=>{if(!t)return 0;const p=t.split(':').map(Number);return p[0]*60+p[1
 const gid=()=>'t'+Date.now()+Math.random().toString(36).slice(2,6);
 const sL=d=>{try{localStorage.setItem(LK,JSON.stringify(d))}catch(e){}};
 const lL=()=>{try{const s=localStorage.getItem(LK);return s?JSON.parse(s):null}catch(e){return null}};
-const autoArc=tasks=>{const td=getISO();return(tasks||[]).map(t=>t.category==='event'&&!t.archived&&t.eventDates&&t.eventDates.length>0&&t.eventDates.every(d=>d<td)?{...t,archived:true}:t)};
+const autoArc=tasks=>{const td=getISO();return(tasks||[]).map(t=>t.category==='event'&&!t.archived&&toArr(t.eventDates).length>0&&toArr(t.eventDates).every(d=>d<td)?{...t,archived:true}:t)};
 function getActTime(tk,dow){if(!tk.timeCondition)return null;const ov=tk.timeCondition.dayOverrides;return(ov&&ov[dow])||tk.timeCondition.time}
+function toArr(v){if(!v)return[];if(Array.isArray(v))return v;if(typeof v==='object')return Object.values(v);return[]}
 const SEED=[
   {id:'t1',name:'Desayuno',category:'core',project:'',notes:'',timeCondition:{time:'07:20',labelBefore:null,labelAfter:null,labelSwitchTime:null,dayOverrides:{}},dependsOn:null,activeDays:[...ALL_DAYS],eventDates:[],archived:false,order:0,reminderMin:0,isGoal:false,parentId:null},
   {id:'t2',name:'Almuerzo',category:'core',project:'',notes:'',timeCondition:{time:'12:30',labelBefore:null,labelAfter:null,labelSwitchTime:null,dayOverrides:{}},dependsOn:null,activeDays:[...ALL_DAYS],eventDates:[],archived:false,order:1,reminderMin:0,isGoal:false,parentId:null},
@@ -115,9 +116,9 @@ function App(){
   useEffect(()=>{
     const tick=()=>{const t=getHM();setCt(t);if(!nOn)return;const nm=toM(t),td=getISO(),dw=getDow();
       tasks.forEach(tk=>{if(tk.archived||!tk.timeCondition||comp[tk.id]||skip[tk.id])return;const at=getActTime(tk,dw);if(!at)return;
-        if(tk.category==='event'&&(tk.reminderMin||0)>0&&(tk.eventDates||[]).includes(td)){const tM=toM(at),rM=tM-(tk.reminderMin||0),rk=tk.id+'_r';if(nm>=rM&&nm<tM&&!remSet.current.has(rk)){ntfy('📅 '+tk.name+' en '+tk.reminderMin+'min',at,rk);setBanner(tk.name+' en '+tk.reminderMin+'min');setTimeout(()=>setBanner(null),5000);remSet.current.add(rk)}}
+        if(tk.category==='event'&&(tk.reminderMin||0)>0&&toArr(tk.eventDates).includes(td)){const tM=toM(at),rM=tM-(tk.reminderMin||0),rk=tk.id+'_r';if(nm>=rM&&nm<tM&&!remSet.current.has(rk)){ntfy('📅 '+tk.name+' en '+tk.reminderMin+'min',at,rk);setBanner(tk.name+' en '+tk.reminderMin+'min');setTimeout(()=>setBanner(null),5000);remSet.current.add(rk)}}
         if(tk.category!=='core'&&tk.category!=='event')return;if(ntfSet.current.has(tk.id))return;
-        if(tk.category==='core'&&!(tk.activeDays||[]).includes(dw))return;if(tk.category==='event'&&!(tk.eventDates||[]).includes(td))return;
+        if(tk.category==='core'&&!toArr(tk.activeDays).includes(dw))return;if(tk.category==='event'&&!toArr(tk.eventDates).includes(td))return;
         const tM=toM(at);if(nm>=tM&&nm<=tM+2){ntfy(tk.category==='event'?'📅':'⏰',tk.name,tk.id);setBanner(tk.name);setTimeout(()=>setBanner(null),5000);ntfSet.current.add(tk.id)}})};
     tick();const iv=setInterval(tick,10000);const onV=()=>{if(!document.hidden)tick()};document.addEventListener('visibilitychange',onV);
     // Schedule notifications in SW for background delivery
@@ -125,8 +126,8 @@ function App(){
       const now=new Date(),td=getISO(),dw=getDow(),notifs=[];
       tasks.forEach(tk=>{if(tk.archived||!tk.timeCondition||comp[tk.id]||skip[tk.id])return;
         const at=getActTime(tk,dw);if(!at)return;
-        if(tk.category==='core'&&!(tk.activeDays||[]).includes(dw))return;
-        if(tk.category==='event'&&!(tk.eventDates||[]).includes(td))return;
+        if(tk.category==='core'&&!toArr(tk.activeDays).includes(dw))return;
+        if(tk.category==='event'&&!toArr(tk.eventDates).includes(td))return;
         const[h,m]=at.split(':').map(Number);const fire=new Date(now);fire.setHours(h,m,0,0);
         if(fire>now)notifs.push({title:tk.category==='event'?'📅 Event':'⏰ '+tk.name,body:at,tag:tk.id,fireAt:fire.getTime()});
         if(tk.category==='event'&&(tk.reminderMin||0)>0){const rf=new Date(fire.getTime()-tk.reminderMin*60000);
@@ -143,7 +144,7 @@ function App(){
   const resolved=useCallback(id=>!!comp[id]||!!skip[id],[comp,skip]);
   const isHeld=useCallback(id=>hold[id]&&hold[id]>Date.now(),[hold]);
   const td=getISO(),dw=getDow();
-  const isAct=useCallback(t=>{if(t.archived)return false;if(t.category==='event')return(t.eventDates||[]).includes(td);return(t.activeDays||ALL_DAYS).includes(dw)},[td,dw]);
+  const isAct=useCallback(t=>{if(t.archived)return false;if(t.category==='event')return toArr(t.eventDates).includes(td);return toArr(t.activeDays||ALL_DAYS).includes(dw)},[td,dw]);
   const ceT=tasks.filter(t=>(t.category==='core'||t.category==='event')&&isAct(t));
   const tOk=useCallback(t=>{if(!t.timeCondition)return true;const at=getActTime(t,dw);return!at||toM(ct)>=toM(at)},[ct,dw]);
   const dOk=useCallback(tk=>{
@@ -299,7 +300,7 @@ function App(){
     const done=!!comp[task.id],isSk=!!skip[task.id],c=CAT[cat],at=getActTime(task,dw);
     const isDO=dragOverId===task.id;const subs=tasks.filter(t=>t.parentId===task.id&&!t.archived);
     const subsColl=!!collSubs[task.id];
-    const dates=(task.eventDates||[]);
+    const dates=Array.isArray(task.eventDates)?task.eventDates:task.eventDates?Object.values(task.eventDates):[];
     const dateStr=dates.length>0?dates.join(', '):'Sin fecha';
 
     // Build info chips array
@@ -488,8 +489,8 @@ function DetailSheet({task,dispName,onClose,onUpdateNotes}){
         task.isGoal&&h('span',{style:{fontSize:9,color:'#fbbf24',fontWeight:800}},'🎯')),
       h('h2',{style:{fontSize:16,fontWeight:700,color:'#f8fafc',margin:'6px 0 14px'}},dispName),
       task.timeCondition&&h('div',{style:{fontSize:11,color:'#64748b',marginBottom:6}},task.timeCondition.time),
-      task.category==='event'&&(task.eventDates||[]).length>0&&h('div',{style:{fontSize:11,color:'#fb7185',marginBottom:6}},'📅 '+task.eventDates.join(', ')),
-      (task.activeDays||[]).length>0&&(task.activeDays||[]).length<7&&h('div',{style:{display:'flex',gap:3,marginBottom:10}},DAYS.map(d=>h('span',{key:d,style:{fontSize:9,fontWeight:700,padding:'2px 5px',borderRadius:4,background:(task.activeDays||[]).includes(d)?'rgba(251,191,36,0.12)':'transparent',color:(task.activeDays||[]).includes(d)?'#fbbf24':'#334155'}},DL[d]))),
+      task.category==='event'&&toArr(task.eventDates).length>0&&h('div',{style:{fontSize:11,color:'#fb7185',marginBottom:6}},'📅 '+toArr(task.eventDates).join(', ')),
+      toArr(task.activeDays).length>0&&toArr(task.activeDays).length<7&&h('div',{style:{display:'flex',gap:3,marginBottom:10}},DAYS.map(d=>h('span',{key:d,style:{fontSize:9,fontWeight:700,padding:'2px 5px',borderRadius:4,background:toArr(task.activeDays).includes(d)?'rgba(251,191,36,0.12)':'transparent',color:toArr(task.activeDays).includes(d)?'#fbbf24':'#334155'}},DL[d]))),
       h('label',{style:{display:'block',fontSize:11,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',marginBottom:4}},'Notes'),
       h('textarea',{style:{width:'100%',padding:'10px 12px',background:'#0f172a',border:'1px solid #334155',borderRadius:8,color:'#e2e8f0',fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box',minHeight:100,resize:'vertical'},value:notes,onChange:e=>{setNotes(e.target.value);setDirty(true)},placeholder:'Notes...'}),
       h('div',{style:{display:'flex',gap:8,marginTop:14}},
