@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-22T20 v6.5
+// BUILD: 2026-02-22 v7.0
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -32,6 +32,29 @@ const IC={Sun:icon([['circle',{cx:12,cy:12,r:5}],['line',{x1:12,y1:1,x2:12,y2:3}
 const F="'SF Pro Display',-apple-system,'Segoe UI',sans-serif";
 if(!document.getElementById('cCSS')){const s=document.createElement('style');s.id='cCSS';s.textContent='@keyframes popIn{0%{transform:scale(0);opacity:0}100%{transform:scale(1);opacity:1}}@keyframes cbPulse{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}.cb-pulse{animation:cbPulse .3s ease-out}@keyframes confetti{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(-120px) rotate(720deg);opacity:0}}';document.head.appendChild(s)}
 function Celebration({text,big,onDone}){const[op,setOp]=useState(0);useEffect(()=>{setOp(1);const t=setTimeout(()=>{setOp(0);setTimeout(onDone,500)},big?4500:1400);return()=>clearTimeout(t)},[]);const cf=big?Array.from({length:30},(_,i)=>({l:5+Math.random()*90,d:1+Math.random()*2.5,c:['#f59e0b','#10b981','#3b82f6','#a855f7','#f43f5e','#fbbf24','#34d399','#fb7185'][i%8],sz:5+Math.random()*10})):[];return h('div',{style:{position:'fixed',inset:0,display:'flex',alignItems:'center',justifyContent:'center',zIndex:999,pointerEvents:'none',transition:'opacity .5s',opacity:op,background:big?'radial-gradient(circle at 50% 40%,rgba(251,191,36,0.25),rgba(16,185,129,0.1),transparent 70%)':'none'}},cf.map((c,i)=>h('div',{key:i,style:{position:'absolute',left:c.l+'%',bottom:'20%',width:c.sz,height:c.sz,borderRadius:c.sz>8?'50%':'2px',background:c.c,animation:'confetti '+c.d+'s ease-out '+(i*60)+'ms both'}})),h('div',{style:{textAlign:'center',position:'relative'}},h('div',{style:{fontSize:big?100:48,animation:'popIn .5s cubic-bezier(.175,.885,.32,1.275) forwards'}},big?'🏆':'✅'),big&&h('div',{style:{fontSize:20,marginTop:4,animation:'popIn .5s .2s cubic-bezier(.175,.885,.32,1.275) both'}},'🎉🎉🎉'),h('div',{style:{fontSize:big?36:18,fontWeight:900,color:big?'#fbbf24':'#10b981',textShadow:big?'0 0 60px rgba(251,191,36,0.9),0 0 120px rgba(251,191,36,0.4)':'0 0 30px rgba(16,185,129,0.5)',animation:'popIn .5s '+(big?'.3s':'.15s')+' cubic-bezier(.175,.885,.32,1.275) both',fontFamily:F,marginTop:big?20:8,letterSpacing:big?'0.02em':'normal'}},text),big&&h('div',{style:{fontSize:16,color:'#94a3b8',marginTop:14,animation:'popIn .5s .5s both',fontFamily:F,letterSpacing:'0.05em'}},'🌟 ¡Lo lograste! 🌟')))}
+
+// ═══ HERO CARD ═══
+function HeroCard({task,dN,doC,doS,doHold,setViewing,uN,CAT,IC,F,ct}){
+  const[showNotes,setShowNotes]=useState(false);
+  const[notes,setNotes]=useState(task.notes||'');
+  useEffect(()=>{setNotes(task.notes||'');setShowNotes(false)},[task.id]);
+  const save=()=>{uN(task.id,notes)};
+  const c=CAT[task.category];
+  return h('div',{style:{background:'linear-gradient(135deg,rgba(251,191,36,0.05),rgba(251,191,36,0.01))',border:'1px solid rgba(251,191,36,0.15)',borderRadius:18,padding:'20px 18px',marginBottom:8,boxShadow:'0 0 30px rgba(251,191,36,0.04)'}},
+    h('div',{style:{display:'flex',alignItems:'center',gap:6,color:'#f59e0b',marginBottom:10}},h(IC.Focus),h('span',{style:{fontSize:11,fontWeight:800,letterSpacing:'0.1em'}},'FOCUS NOW')),
+    h('div',{style:{fontSize:24,fontWeight:800,color:'#fef3c7',lineHeight:1.2,marginBottom:8}},dN(task)),
+    task.isGoal&&h('div',{style:{fontSize:13,fontWeight:800,color:'#fbbf24',marginBottom:8,background:'linear-gradient(90deg,rgba(251,191,36,0.1),transparent)',padding:'5px 10px',borderRadius:7,border:'1px solid rgba(251,191,36,0.2)'}},'🎯 DAILY GOAL'),
+    h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:10,flexWrap:'wrap'}},
+      h('span',{style:{fontSize:8,fontWeight:700,padding:'2px 5px',borderRadius:4,border:'1px solid '+c.border,background:c.bg,color:c.text,textTransform:'uppercase'}},c.label),
+      task.project&&h('span',{style:{fontSize:11,fontWeight:600,color:'#94a3b8',background:'rgba(148,163,184,0.1)',padding:'2px 8px',borderRadius:5}},task.project),
+      h('button',{style:{marginLeft:'auto',padding:'4px 10px',fontSize:10,background:showNotes?'rgba(251,191,36,0.12)':'rgba(100,116,139,0.08)',border:'1px solid '+(showNotes?'rgba(251,191,36,0.25)':'rgba(100,116,139,0.15)'),borderRadius:6,color:showNotes?'#fbbf24':'#64748b',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setShowNotes(!showNotes)},'📝 Notes')),
+    showNotes&&h('div',{style:{marginBottom:12}},
+      h('textarea',{style:{width:'100%',padding:'10px 12px',background:'rgba(15,23,42,0.6)',border:'1px solid rgba(251,191,36,0.15)',borderRadius:10,color:'#e2e8f0',fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box',minHeight:80,resize:'vertical'},value:notes,onChange:e=>setNotes(e.target.value),onBlur:save,placeholder:'Write notes here...'})),
+    h('div',{style:{display:'flex',gap:8}},
+      h('button',{style:{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'12px 16px',background:'linear-gradient(135deg,#10b981,#059669)',border:'none',borderRadius:12,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:F},onClick:()=>doC(task.id)},h(IC.CheckBig),' Done'),
+      h('button',{style:{padding:'12px 14px',background:'rgba(100,116,139,0.12)',border:'1px solid rgba(100,116,139,0.2)',borderRadius:12,color:'#94a3b8',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F},onClick:()=>doS(task.id)},'Skip'),
+      h('button',{style:{padding:'12px 14px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:12,color:'#f59e0b',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F},onClick:()=>doHold(task.id,60)},'⏸1h')));
+}
 
 // ═══ MAIN APP ═══
 function App(){
@@ -376,7 +399,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':'Manage'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'6.5'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'7.0'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
@@ -401,17 +424,7 @@ function App(){
         // Events
         todayEv.length>0&&h('div',{style:{marginBottom:14}},h('div',{style:{fontSize:10,fontWeight:700,color:'#fb7185',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6,padding:'0 4px'}},'📅 Events'),h('div',{style:{display:'flex',flexDirection:'column',gap:4}},todayEv.map(rEvent))),
         // Hero
-        nxt&&h('div',{style:{background:'linear-gradient(135deg,rgba(251,191,36,0.05),rgba(251,191,36,0.01))',border:'1px solid rgba(251,191,36,0.15)',borderRadius:18,padding:'20px 18px',marginBottom:8,boxShadow:'0 0 30px rgba(251,191,36,0.04)'},onClick:()=>setViewing(nxt)},
-          h('div',{style:{display:'flex',alignItems:'center',gap:6,color:'#f59e0b',marginBottom:10}},h(IC.Focus),h('span',{style:{fontSize:11,fontWeight:800,letterSpacing:'0.1em'}},'FOCUS NOW')),
-          h('div',{style:{fontSize:24,fontWeight:800,color:'#fef3c7',lineHeight:1.2,marginBottom:8}},dN(nxt)),
-          nxt.isGoal&&h('div',{style:{fontSize:13,fontWeight:800,color:'#fbbf24',marginBottom:8,background:'linear-gradient(90deg,rgba(251,191,36,0.1),transparent)',padding:'5px 10px',borderRadius:7,border:'1px solid rgba(251,191,36,0.2)'}},'🎯 DAILY GOAL'),
-          h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:14,flexWrap:'wrap'}},
-            h('span',{style:{fontSize:8,fontWeight:700,padding:'2px 5px',borderRadius:4,border:'1px solid '+CAT[nxt.category].border,background:CAT[nxt.category].bg,color:CAT[nxt.category].text,textTransform:'uppercase'}},CAT[nxt.category].label),
-            nxt.project&&h('span',{style:{fontSize:11,fontWeight:600,color:'#94a3b8',background:'rgba(148,163,184,0.1)',padding:'2px 8px',borderRadius:5}},nxt.project)),
-          h('div',{style:{display:'flex',gap:8},onClick:e=>e.stopPropagation()},
-            h('button',{style:{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'12px 16px',background:'linear-gradient(135deg,#10b981,#059669)',border:'none',borderRadius:12,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:F},onClick:()=>doC(nxt.id)},h(IC.CheckBig),' Done'),
-            h('button',{style:{padding:'12px 14px',background:'rgba(100,116,139,0.12)',border:'1px solid rgba(100,116,139,0.2)',borderRadius:12,color:'#94a3b8',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F},onClick:()=>doS(nxt.id)},'Skip'),
-            h('button',{style:{padding:'12px 14px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:12,color:'#f59e0b',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:F},onClick:()=>doHold(nxt.id,60)},'⏸1h'))),
+        nxt&&h(HeroCard,{task:nxt,dN,doC,doS,doHold,setViewing,uN,CAT,IC,F,ct}),
         pct===1&&h('div',{style:{background:'linear-gradient(135deg,rgba(16,185,129,0.05),rgba(16,185,129,0.01))',border:'1px solid rgba(16,185,129,0.15)',borderRadius:18,padding:'20px',textAlign:'center'}},h('span',{style:{fontSize:26}},'🎉'),h('div',{style:{fontSize:20,fontWeight:800,color:'#34d399',marginTop:6}},'All done!')),
         // 3 Sections
         completedT.length>0&&h('div',null,secH('Completed',completedT.length,showCompleted,setShowCompleted),showCompleted&&h('div',{style:{display:'flex',flexDirection:'column',gap:4}},completedT.map(t=>rCard(t,true)))),
