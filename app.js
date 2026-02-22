@@ -505,7 +505,7 @@ function App(){
       h('button',{style:{width:'100%',textAlign:'left',padding:'6px 8px',background:!focusProj?'rgba(168,85,247,0.12)':'none',border:'none',borderRadius:6,color:!focusProj?'#c084fc':'#94a3b8',cursor:'pointer',fontSize:11,fontFamily:F,fontWeight:600},onClick:()=>{setFocusProj(null);setShowFocus(false)}},'All'),
       projects.map(p=>h('button',{key:p,style:{width:'100%',textAlign:'left',padding:'6px 8px',background:focusProj===p?'rgba(168,85,247,0.12)':'none',border:'none',borderRadius:6,color:focusProj===p?'#c084fc':'#94a3b8',cursor:'pointer',fontSize:11,fontFamily:F,fontWeight:600,marginTop:1},onClick:()=>{setFocusProj(p);setShowFocus(false)}},p))),
     // Content
-    h('div',{ref:el=>{if(el)el.scrollTop=0},key:tab,style:{padding:'10px 14px',paddingBottom:90,overflow:'auto',height:'calc(100vh - 55px - 60px)',WebkitOverflowScrolling:'touch'}},
+   h('div',{key:tab,style:{padding:'10px 14px',paddingBottom:90,overflow:'auto',height:'calc(100vh - 55px - 60px)',WebkitOverflowScrolling:'touch'}},
       tab==='day'?
       h('div',{style:{paddingBottom:80}},
         // Floating inventory button
