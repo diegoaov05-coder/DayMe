@@ -168,10 +168,10 @@ function App(){
   };
 
   // Check if goal already met (for bonus rewards)
-  const isGoalMet=cat=>{
+  const isGoalMet=(cat,extraId)=>{
     const catT=tasks.filter(t=>!t.archived&&isAct(t)&&t.category===cat);
     const goal=catT.find(t=>t.isGoal);if(!goal)return false;
-    return!!comp[goal.id];
+    return!!comp[goal.id]||goal.id===extraId;
   };
 
   // ═══ ACTIONS ═══
@@ -182,7 +182,7 @@ function App(){
       if(tk){const isGoalHit=checkGoal(id,tk.category);
         if(!isGoalHit){setCeleb('Done!');setCelebBig(false);
           // Bonus: if goal already met, give instant reward
-          if((tk.category==='work'||tk.category==='personal')&&isGoalMet(tk.category))giveReward(true);
+          if((tk.category==='work'||tk.category==='personal')&&isGoalMet(tk.category,id))giveReward(true);
         }
       }
     }
@@ -315,8 +315,6 @@ function App(){
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':'Manage'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
-      // Inventory badge
-      tab==='day'&&inventory.length>0&&h('button',{style:{fontSize:11,padding:'3px 8px',borderRadius:8,background:'rgba(168,85,247,0.15)',border:'1px solid rgba(168,85,247,0.3)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setShowInv(true)},'🎁 x'+inventory.length),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
       tab==='day'&&projects.length>0&&h('button',{style:{background:'none',border:'none',cursor:'pointer',padding:3,display:'flex',color:focusProj?'#a855f7':'#334155'},onClick:()=>setShowFocus(!showFocus)},h(IC.Zap)),
       h('button',{style:{background:'none',border:'none',cursor:'pointer',padding:3,display:'flex',color:nOn?'#f59e0b':'#475569'},onClick:nOn?()=>setNOn(false):rqN},nOn?h(IC.Bell):h(IC.BellOff))),
@@ -327,6 +325,8 @@ function App(){
     h('div',{style:{padding:'10px 14px',paddingBottom:90}},
       tab==='day'?
       h('div',{style:{paddingBottom:80}},
+        // Floating inventory button
+        h('button',{style:{position:'fixed',top:56,right:'calc(50% - 225px)',zIndex:55,fontSize:13,padding:'6px 12px',borderRadius:10,background:inventory.length>0?'linear-gradient(135deg,rgba(168,85,247,0.2),rgba(168,85,247,0.1))':'rgba(30,41,59,0.9)',border:'1px solid '+(inventory.length>0?'rgba(168,85,247,0.4)':'rgba(51,65,85,0.5)'),color:inventory.length>0?'#c084fc':'#64748b',cursor:'pointer',fontFamily:F,fontWeight:700,boxShadow:'0 4px 12px rgba(0,0,0,0.3)',backdropFilter:'blur(8px)'},onClick:()=>setShowInv(true)},inventory.length>0?'🎁 '+inventory.length:'🎁 0'),
         h('div',{style:{marginBottom:14}},h('div',{style:{display:'flex',position:'relative',background:'#1e293b',borderRadius:12,padding:3,height:44}},
           h('div',{style:{position:'absolute',top:3,left:3,width:'calc(50% - 3px)',height:38,borderRadius:10,transition:'all .3s',zIndex:0,transform:mode==='work'?'translateX(100%)':'translateX(0%)',background:mode==='personal'?'linear-gradient(135deg,#a855f7,#7c3aed)':'linear-gradient(135deg,#3b82f6,#2563eb)'}}),
           h('button',{style:{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontSize:13,fontWeight:600,background:'none',border:'none',cursor:'pointer',zIndex:1,position:'relative',fontFamily:F,color:mode==='personal'?'#fff':'#94a3b8'},onClick:()=>setMode('personal')},h(IC.Sun),' Personal'),
