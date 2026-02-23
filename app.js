@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-22 v7.4
+// BUILD: 2026-02-22 v7.6
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -275,7 +275,9 @@ function App(){
   const dN=useCallback(t=>{if(!t.timeCondition)return t.name;const tc=t.timeCondition;if(tc.labelSwitchTime&&tc.labelBefore&&tc.labelAfter)return toM(ct)>=toM(tc.labelSwitchTime)?tc.labelAfter:tc.labelBefore;return t.name},[ct]);
   const bW=useCallback(tk=>{
     const r=[];if(isHeld(tk.id)){const min=Math.ceil((hold[tk.id]-Date.now())/60000);r.push('⏸ Hold '+min+'min');return r}
-    const at=getActTime(tk,dw);if(tk.timeCondition&&at&&toM(ct)<toM(at))r.push(at);
+    const ownTc=tk.timeCondition;const parentTc=tk.parentId?tasks.find(p=>p.id===tk.parentId)?.timeCondition:null;
+    const tc=ownTc||parentTc;
+    if(tc){const at=tc.dayOverrides&&tc.dayOverrides[dw]?tc.dayOverrides[dw]:tc.time;if(at&&toM(ct)<toM(at))r.push('🔓 '+at)}
     if(tk.dependsOn&&!resolved(tk.dependsOn)){const p=tasks.find(x=>x.id===tk.dependsOn);if(p)r.push('After: '+p.name)}
     if(tk.category==='work'||tk.category==='personal'){const pn=ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id));if(pn.length)r.push('Pending: '+pn.map(c=>c.name).join(', '))}
     return r;
@@ -363,23 +365,29 @@ function App(){
     if(t.category!==mode)return false;
     if(focusProj&&t.project!==focusProj)return false;return true;
   }).sort((a,b)=>{
-    // Effective order: subtasks get parent.order + fraction so they stay grouped after parent position
+    // Category priority: core=0, event=1, work/personal=2
+    const catPri={core:0,event:1,work:2,personal:2};
+    const aCat=catPri[a.category]??2, bCat=catPri[b.category]??2;
+    if(aCat!==bCat)return aCat-bCat;
+    // Within same category, use effective order (subtasks grouped under parent)
     const effOrd=t=>{
-      if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return(p?p.order||0:0)+(t.order||0)*0.001}
+      if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return(p?p.order||0:0)+0.001+(t.order||0)*0.0001}
       return t.order||0;
     };
-    const aTime=a.timeCondition||(a.parentId?tasks.find(p=>p.id===a.parentId)?.timeCondition:null);
-    const bTime=b.timeCondition||(b.parentId?tasks.find(p=>p.id===b.parentId)?.timeCondition:null);
-    const aT=aTime?toM(getActTime(a,dw)||(aTime.dayOverrides&&aTime.dayOverrides[dw])||aTime.time||'23:59'):9999;
-    const bT=bTime?toM(getActTime(b,dw)||(bTime.dayOverrides&&bTime.dayOverrides[dw])||bTime.time||'23:59'):9999;
-    if(aT!==bT&&aT<9999&&bT<9999)return aT-bT;
-    return effOrd(a)-effOrd(b);
+    const aO=effOrd(a),bO=effOrd(b);
+    if(aO!==bO)return aO-bO;
+    // Tiebreak: time-activated tasks
+    const aTime=a.timeCondition?toM(getActTime(a,dw)||'23:59'):9999;
+    const bTime=b.timeCondition?toM(getActTime(b,dw)||'23:59'):9999;
+    return aTime-bTime;
   });
 
   const todayEv=dayT.filter(t=>t.category==='event');
   const nonEv=dayT.filter(t=>t.category!=='event');
   // FIX: sort by order not time for next task (time-activated tasks respect queue)
-  const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>(a.order||0)-(b.order||0))[0];
+  const effOrd=t=>{if(t.parentId){const p=tasks.find(x=>x.id===t.parentId);return(p?p.order||0:0)+0.001+(t.order||0)*0.0001}return t.order||0};
+  const catPri={core:0,event:1,work:2,personal:2};
+  const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>{const cp=(catPri[a.category]??2)-(catPri[b.category]??2);return cp!==0?cp:effOrd(a)-effOrd(b)})[0];
   // Three sections
   const completedT=nonEv.filter(t=>resolved(t.id));
   const blockedT=nonEv.filter(t=>!resolved(t.id)&&!isUL(t)&&!isHeld(t.id)&&t.timeCondition&&!tOk(t));
@@ -495,7 +503,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':tab==='admin'?'Manage':'Log'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'7.4'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'7.6'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
@@ -505,7 +513,7 @@ function App(){
       h('button',{style:{width:'100%',textAlign:'left',padding:'6px 8px',background:!focusProj?'rgba(168,85,247,0.12)':'none',border:'none',borderRadius:6,color:!focusProj?'#c084fc':'#94a3b8',cursor:'pointer',fontSize:11,fontFamily:F,fontWeight:600},onClick:()=>{setFocusProj(null);setShowFocus(false)}},'All'),
       projects.map(p=>h('button',{key:p,style:{width:'100%',textAlign:'left',padding:'6px 8px',background:focusProj===p?'rgba(168,85,247,0.12)':'none',border:'none',borderRadius:6,color:focusProj===p?'#c084fc':'#94a3b8',cursor:'pointer',fontSize:11,fontFamily:F,fontWeight:600,marginTop:1},onClick:()=>{setFocusProj(p);setShowFocus(false)}},p))),
     // Content
-   h('div',{key:tab,style:{padding:'10px 14px',paddingBottom:90,overflow:'auto',height:'calc(100vh - 55px - 60px)',WebkitOverflowScrolling:'touch'}},
+    h('div',{ref:el=>{if(el)el.scrollTop=0},key:tab,style:{padding:'10px 14px',paddingBottom:90,overflow:'auto',height:'calc(100vh - 55px - 60px)',WebkitOverflowScrolling:'touch'}},
       tab==='day'?
       h('div',{style:{paddingBottom:80}},
         // Floating inventory button
@@ -532,7 +540,15 @@ function App(){
       // ═══ ADMIN ═══
       h('div',{style:{paddingBottom:100}},
         h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}},
-          h('button',{style:{fontSize:11,padding:'5px 12px',borderRadius:8,background:reorderOn?'rgba(251,191,36,0.15)':'rgba(100,116,139,0.1)',border:'1px solid '+(reorderOn?'rgba(251,191,36,0.3)':'rgba(100,116,139,0.2)'),color:reorderOn?'#fbbf24':'#64748b',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setReorderOn(!reorderOn)},reorderOn?'🔓 Reorder ON':'🔒 Reorder OFF')),
+          h('button',{style:{fontSize:11,padding:'5px 12px',borderRadius:8,background:reorderOn?'rgba(251,191,36,0.15)':'rgba(100,116,139,0.1)',border:'1px solid '+(reorderOn?'rgba(251,191,36,0.3)':'rgba(100,116,139,0.2)'),color:reorderOn?'#fbbf24':'#64748b',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setReorderOn(!reorderOn)},reorderOn?'🔓 Reorder ON':'🔒 Reorder OFF'),
+          h('button',{style:{fontSize:11,padding:'5px 12px',borderRadius:8,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',color:'#34d399',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>{
+            markDirty();setTasks(prev=>{const cats=['core','event','work','personal'];const result=[...prev];
+            cats.forEach(cat=>{const parents=result.filter(t=>t.category===cat&&!t.archived&&!t.parentId).sort((a,b)=>(a.order||0)-(b.order||0));
+              parents.forEach((p,i)=>{const idx=result.findIndex(t=>t.id===p.id);if(idx>=0)result[idx]={...result[idx],order:i};
+                const subs=result.filter(t=>t.parentId===p.id&&!t.archived).sort((a,b)=>(a.order||0)-(b.order||0));
+                subs.forEach((s,j)=>{const si=result.findIndex(t=>t.id===s.id);if(si>=0)result[si]={...result[si],order:j}})})});
+            return result})
+          }},'🔧 Fix Order')),
         ['core','event','work','personal'].map(cat=>{const list=grp[cat];if(!list||!list.length)return null;const c=CAT[cat],coll=!!collCats[cat];
           return h('div',{key:cat,style:{marginBottom:coll?6:16}},
             h('div',{style:{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:700,textTransform:'uppercase',color:c.text,marginBottom:coll?0:6,padding:'0 4px',cursor:'pointer'},onClick:()=>setCollCats(p=>({...p,[cat]:!p[cat]}))},
