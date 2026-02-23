@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-22 v7.6
+// BUILD: 2026-02-22 v7.7
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -417,7 +417,7 @@ function App(){
           !task.parentId&&!mini&&h('span',{style:{fontSize:8,fontWeight:700,padding:'1px 5px',borderRadius:4,border:'1px solid '+c.border,background:c.bg,color:c.text,textTransform:'uppercase'}},c.label),
           isG&&h('span',{style:{fontSize:9,fontWeight:800,color:'#fbbf24',background:'rgba(251,191,36,0.12)',padding:'1px 6px',borderRadius:5,border:'1px solid rgba(251,191,36,0.25)'}},'🎯 META'),
           wasEnd&&h('span',{style:{fontSize:9,color:'#34d399',fontWeight:700}},'✨ done today')),
-        !u&&!rs&&reasons.length>0&&!mini&&h('div',{style:{marginTop:2}},reasons.map((r,i)=>h('span',{key:i,style:{fontSize:9,color:hld?'#f59e0b':'#64748b',marginRight:8}},r)))),
+        !u&&!rs&&reasons.length>0&&h('div',{style:{marginTop:2}},reasons.map((r,i)=>h('span',{key:i,style:{fontSize:9,color:hld?'#f59e0b':'#64748b',marginRight:8}},r)))),
       h('div',{style:{display:'flex',gap:3,flexShrink:0}},
         u&&!rs&&h('button',{style:{width:24,height:24,borderRadius:6,border:'1px solid rgba(100,116,139,0.2)',background:'rgba(100,116,139,0.08)',color:'#64748b',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'},onClick:e=>{e.stopPropagation();doS(task.id)}},h(IC.X)),
         u&&!rs&&!hld&&h('button',{style:{width:24,height:24,borderRadius:6,border:'1px solid rgba(245,158,11,0.2)',background:'rgba(245,158,11,0.08)',color:'#f59e0b',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'},onClick:e=>{e.stopPropagation();doHold(task.id,60)}},h(IC.Pause)),
@@ -503,7 +503,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':tab==='admin'?'Manage':'Log'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'7.6'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'7.7'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
