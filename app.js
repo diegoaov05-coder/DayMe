@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-22 v7.7
+// BUILD: 2026-02-22 v7.8
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -266,11 +266,26 @@ function App(){
     if(!tc)return true;const at=tc.dayOverrides&&tc.dayOverrides[dw]?tc.dayOverrides[dw]:tc.time;
     return!at||toM(ct)>=toM(at);
   },[ct,dw,tasks]);
+  // Check if a core/event parent is effectively done (all subs resolved or held)
+  const parentClear=useCallback(pid=>{
+    const subs=tasks.filter(t=>t.parentId===pid&&!t.archived);
+    if(subs.length===0)return false;
+    return subs.every(s=>!!comp[s.id]||!!skip[s.id]||isHeld(s.id));
+  },[tasks,comp,skip,isHeld]);
   const dOk=useCallback(tk=>{
     if(tk.dependsOn&&!resolved(tk.dependsOn))return false;
-    if(tk.category==='work'||tk.category==='personal')if(ceT.filter(c=>tOk(c)&&!resolved(c.id)&&!isHeld(c.id)).length>0)return false;
+    if(tk.category==='work'||tk.category==='personal'){
+      const pending=ceT.filter(c=>{
+        if(!tOk(c))return false;
+        if(resolved(c.id)||isHeld(c.id))return false;
+        // Parent with all subs resolved/held = clear
+        if(parentClear(c.id))return false;
+        return true;
+      });
+      if(pending.length>0)return false;
+    }
     return true;
-  },[resolved,ceT,tOk,isHeld]);
+  },[resolved,ceT,tOk,isHeld,parentClear]);
   const isUL=useCallback(t=>{if(isHeld(t.id))return false;return tOk(t)&&dOk(t)},[tOk,dOk,isHeld]);
   const dN=useCallback(t=>{if(!t.timeCondition)return t.name;const tc=t.timeCondition;if(tc.labelSwitchTime&&tc.labelBefore&&tc.labelAfter)return toM(ct)>=toM(tc.labelSwitchTime)?tc.labelAfter:tc.labelBefore;return t.name},[ct]);
   const bW=useCallback(tk=>{
@@ -503,7 +518,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':tab==='admin'?'Manage':'Log'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'7.7'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'7.8'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
