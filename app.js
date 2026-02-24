@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-23 v8.3
+// BUILD: 2026-02-23 v8.4
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -373,16 +373,16 @@ function App(){
   // Drag reorder
   const handleDrop=(targetId,cat)=>{if(!dragId||dragId===targetId){setDragId(null);setDragOverId(null);return}markDirty();
     if(planTmrw){
-      // Save planned order for tomorrow without changing today
-      setTasks(prev=>{const ct=prev.filter(t=>t.category===cat&&!t.archived);
+      // Move visually AND save planned order for tomorrow
+      setTasks(prev=>{const ct=prev.filter(t=>t.category===cat&&!t.archived);const ot=prev.filter(t=>t.category!==cat||t.archived);
         const fi=ct.findIndex(t=>t.id===dragId);const ti=ct.findIndex(t=>t.id===targetId);if(fi<0||ti<0)return prev;
         const dt=ct[fi];let mv=[dragId];if(!dt.parentId)mv=[...mv,...ct.filter(t=>t.parentId===dragId).map(t=>t.id)];
         const moving=ct.filter(t=>mv.includes(t.id));const rest=ct.filter(t=>!mv.includes(t.id));
         const ins=rest.findIndex(t=>t.id===targetId);rest.splice(ins<0?rest.length:ins,0,...moving);
-        const newOrders={};rest.map((t,i)=>({...t,order:i})).forEach(t=>{newOrders[t.id]=t.order});
-        moving.forEach((t,i)=>{newOrders[t.id]=ins+i});
-        setNextDayOrder(p=>({...p,...newOrders}));
-        return prev});
+        const reordered=rest.map((t,i)=>({...t,order:i}));
+        const newOrders={};reordered.forEach(t=>{newOrders[t.id]=t.order});
+        setNextDayOrder(p=>({...(p||{}),...newOrders}));
+        return[...reordered,...ot]});
     }else{
       setTasks(prev=>{const ct=prev.filter(t=>t.category===cat&&!t.archived);const ot=prev.filter(t=>t.category!==cat||t.archived);
         const fi=ct.findIndex(t=>t.id===dragId);const ti=ct.findIndex(t=>t.id===targetId);if(fi<0||ti<0)return prev;
@@ -544,7 +544,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':tab==='admin'?'Manage':'Log'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'8.3'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'8.4'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
