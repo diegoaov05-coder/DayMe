@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-23 v8.1
+// BUILD: 2026-02-23 v8.3
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -160,11 +160,13 @@ function App(){
   const[showFocus,setShowFocus]=useState(false);
   const[dragId,setDragId]=useState(null);
   const[dragOverId,setDragOverId]=useState(null);
-  const[reorderOn,setReorderOn]=useState(false); // drag reorder toggle
+  const[reorderOn,setReorderOn]=useState(false);
+  const[planTmrw,setPlanTmrw]=useState(false); // planning tomorrow mode
   // Section toggles for day view
   const[showCompleted,setShowCompleted]=useState(true);
   const[showBlocked,setShowBlocked]=useState(true);
   const[showAhead,setShowAhead]=useState(true);
+  const[nextDayOrder,setNextDayOrder]=useState(null); // {taskId: order} for tomorrow
   const[collSubs,setCollSubs]=useState(()=>{try{const s=localStorage.getItem('myday-collsubs');return s?JSON.parse(s):{}}catch(e){return{}}});
   // Rewards system
   const[rewards,setRewards]=useState([]); // [{id,name,type:'micro'|'macro'}]
@@ -189,6 +191,7 @@ function App(){
     const rw=toArr(d.rewards);if(rw.length>0)setRewards(rw);
     setInventory(toArr(d.inventory));
     if(d.dailyLogs){const logs=toArr(d.dailyLogs).map(l=>({...l,core:toArr(l.core),event:toArr(l.event),work:toArr(l.work),personal:toArr(l.personal),notes:toArr(l.notes)}));setDailyLogs(logs)}
+    if(d.nextDayOrder)setNextDayOrder(d.nextDayOrder);
     if(d.notified)ntfSet.current=new Set(d.notified);sL(d);setLoading(false);
   };
 
@@ -211,7 +214,7 @@ function App(){
   // ═══ SAVE ═══
   useEffect(()=>{
     if(loading||tasks.length===0||isResolving.current||!isDirty.current)return;isDirty.current=false;
-    const d={tasks,completed:comp,skipped:skip,hold,rewards,inventory,dailyLogs,notified:[...ntfSet.current],ts:Date.now()};
+    const d={tasks,completed:comp,skipped:skip,hold,rewards,inventory,dailyLogs,nextDayOrder,notified:[...ntfSet.current],ts:Date.now()};
     sL(d);skipFB.current=true;try{dataRef.update(d)}catch(e){}
   },[tasks,comp,skip,hold,rewards,inventory,dailyLogs,loading]);
 
@@ -355,6 +358,8 @@ function App(){
       stats:{total:doneTasks.length,completed:Object.keys(comp).length,skipped:Object.keys(skip).length}};
     setDailyLogs(p=>[log,...p]);
     setPostEnd(doneIds);
+    // Apply tomorrow's planned order if set
+    if(nextDayOrder){setTasks(prev=>prev.map(t=>nextDayOrder[t.id]!=null?{...t,order:nextDayOrder[t.id]}:t));setNextDayOrder(null)}
     markDirty();setComp({});setSkip({});setHold({});setInventory([]);setCEnd(false);ntfSet.current.clear();remSet.current.clear();
   };
   const delT=id=>{markDirty();const subs=tasks.filter(t=>t.parentId===id).map(t=>t.id);const all=[id,...subs];setTasks(p=>p.filter(t=>!all.includes(t.id)).map(t=>t.dependsOn&&all.includes(t.dependsOn)?{...t,dependsOn:null}:t));all.forEach(d=>{setComp(p=>{const n={...p};delete n[d];return n});setSkip(p=>{const n={...p};delete n[d];return n})});setCDel(null)};
@@ -367,12 +372,25 @@ function App(){
 
   // Drag reorder
   const handleDrop=(targetId,cat)=>{if(!dragId||dragId===targetId){setDragId(null);setDragOverId(null);return}markDirty();
-    setTasks(prev=>{const ct=prev.filter(t=>t.category===cat&&!t.archived);const ot=prev.filter(t=>t.category!==cat||t.archived);
-      const fi=ct.findIndex(t=>t.id===dragId);const ti=ct.findIndex(t=>t.id===targetId);if(fi<0||ti<0)return prev;
-      const dt=ct[fi];let mv=[dragId];if(!dt.parentId)mv=[...mv,...ct.filter(t=>t.parentId===dragId).map(t=>t.id)];
-      const moving=ct.filter(t=>mv.includes(t.id));const rest=ct.filter(t=>!mv.includes(t.id));
-      const ins=rest.findIndex(t=>t.id===targetId);rest.splice(ins<0?rest.length:ins,0,...moving);
-      return[...rest.map((t,i)=>({...t,order:i})),...ot]});
+    if(planTmrw){
+      // Save planned order for tomorrow without changing today
+      setTasks(prev=>{const ct=prev.filter(t=>t.category===cat&&!t.archived);
+        const fi=ct.findIndex(t=>t.id===dragId);const ti=ct.findIndex(t=>t.id===targetId);if(fi<0||ti<0)return prev;
+        const dt=ct[fi];let mv=[dragId];if(!dt.parentId)mv=[...mv,...ct.filter(t=>t.parentId===dragId).map(t=>t.id)];
+        const moving=ct.filter(t=>mv.includes(t.id));const rest=ct.filter(t=>!mv.includes(t.id));
+        const ins=rest.findIndex(t=>t.id===targetId);rest.splice(ins<0?rest.length:ins,0,...moving);
+        const newOrders={};rest.map((t,i)=>({...t,order:i})).forEach(t=>{newOrders[t.id]=t.order});
+        moving.forEach((t,i)=>{newOrders[t.id]=ins+i});
+        setNextDayOrder(p=>({...p,...newOrders}));
+        return prev});
+    }else{
+      setTasks(prev=>{const ct=prev.filter(t=>t.category===cat&&!t.archived);const ot=prev.filter(t=>t.category!==cat||t.archived);
+        const fi=ct.findIndex(t=>t.id===dragId);const ti=ct.findIndex(t=>t.id===targetId);if(fi<0||ti<0)return prev;
+        const dt=ct[fi];let mv=[dragId];if(!dt.parentId)mv=[...mv,...ct.filter(t=>t.parentId===dragId).map(t=>t.id)];
+        const moving=ct.filter(t=>mv.includes(t.id));const rest=ct.filter(t=>!mv.includes(t.id));
+        const ins=rest.findIndex(t=>t.id===targetId);rest.splice(ins<0?rest.length:ins,0,...moving);
+        return[...rest.map((t,i)=>({...t,order:i})),...ot]});
+    }
     setDragId(null);setDragOverId(null)};
 
   // ═══ COMPUTED ═══
@@ -407,8 +425,14 @@ function App(){
   const nxt=nonEv.filter(t=>!resolved(t.id)&&isUL(t)).sort((a,b)=>{const cp=(catPri[a.category]??2)-(catPri[b.category]??2);return cp!==0?cp:effOrd(a)-effOrd(b)})[0];
   // Three sections
   const completedT=nonEv.filter(t=>resolved(t.id));
-  const blockedT=nonEv.filter(t=>!resolved(t.id)&&!isUL(t)&&!isHeld(t.id)&&t.timeCondition&&!tOk(t));
-  const aheadT=nonEv.filter(t=>!resolved(t.id)&&t.id!==(nxt?.id)&&!blockedT.find(b=>b.id===t.id));
+  const blockedT=nonEv.filter(t=>{
+    if(resolved(t.id)||isUL(t)||isHeld(t.id))return false;
+    // Check own time or parent time
+    const tc=t.timeCondition||(t.parentId?tasks.find(p=>p.id===t.parentId)?.timeCondition:null);
+    if(tc){const at=tc.dayOverrides&&tc.dayOverrides[dw]?tc.dayOverrides[dw]:tc.time;if(at&&toM(ct)<toM(at))return true}
+    return false;
+  });
+  const aheadT=nonEv.filter(t=>!resolved(t.id)&&t.id!==(nxt?.id)&&!blockedT.find(b=>b.id===t.id)&&!isHeld(t.id));
 
   const rCnt=dayT.filter(t=>resolved(t.id)).length;
   const pct=dayT.length?rCnt/dayT.length:0;
@@ -520,7 +544,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':tab==='admin'?'Manage':'Log'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'8.1'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'8.3'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
@@ -557,7 +581,8 @@ function App(){
       // ═══ ADMIN ═══
       h('div',{style:{paddingBottom:100}},
         h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}},
-          h('button',{style:{fontSize:11,padding:'5px 12px',borderRadius:8,background:reorderOn?'rgba(251,191,36,0.15)':'rgba(100,116,139,0.1)',border:'1px solid '+(reorderOn?'rgba(251,191,36,0.3)':'rgba(100,116,139,0.2)'),color:reorderOn?'#fbbf24':'#64748b',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setReorderOn(!reorderOn)},reorderOn?'🔓 Reorder ON':'🔒 Reorder OFF'),
+          h('button',{style:{fontSize:11,padding:'5px 12px',borderRadius:8,background:reorderOn?'rgba(251,191,36,0.15)':'rgba(100,116,139,0.1)',border:'1px solid '+(reorderOn?'rgba(251,191,36,0.3)':'rgba(100,116,139,0.2)'),color:reorderOn?'#fbbf24':'#64748b',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>{setReorderOn(!reorderOn);if(!reorderOn)setPlanTmrw(false)}},reorderOn?'🔓 Reorder':'🔒 Reorder'),
+          reorderOn&&h('button',{style:{fontSize:11,padding:'5px 12px',borderRadius:8,background:planTmrw?'rgba(59,130,246,0.15)':'rgba(100,116,139,0.1)',border:'1px solid '+(planTmrw?'rgba(59,130,246,0.3)':'rgba(100,116,139,0.2)'),color:planTmrw?'#60a5fa':'#64748b',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setPlanTmrw(!planTmrw)},planTmrw?'📅 Tomorrow':'📅 Today'),
           h('button',{style:{fontSize:11,padding:'5px 12px',borderRadius:8,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',color:'#34d399',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>{
             markDirty();setTasks(prev=>{const cats=['core','event','work','personal'];const result=[...prev];
             cats.forEach(cat=>{const parents=result.filter(t=>t.category===cat&&!t.archived&&!t.parentId).sort((a,b)=>(a.order||0)-(b.order||0));
@@ -565,7 +590,10 @@ function App(){
                 const subs=result.filter(t=>t.parentId===p.id&&!t.archived).sort((a,b)=>(a.order||0)-(b.order||0));
                 subs.forEach((s,j)=>{const si=result.findIndex(t=>t.id===s.id);if(si>=0)result[si]={...result[si],order:j}})})});
             return result})
-          }},'🔧 Fix Order')),
+          }},'🔧 Fix')),
+        nextDayOrder&&Object.keys(nextDayOrder).length>0&&h('div',{style:{fontSize:10,color:'#60a5fa',background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.15)',borderRadius:8,padding:'6px 10px',marginBottom:8,display:'flex',alignItems:'center',justifyContent:'space-between'}},
+          h('span',null,'📅 Tomorrow\'s order planned'),
+          h('button',{style:{fontSize:9,padding:'2px 8px',background:'none',border:'1px solid rgba(59,130,246,0.3)',borderRadius:5,color:'#60a5fa',cursor:'pointer',fontFamily:F},onClick:()=>{setNextDayOrder(null);markDirty()}},'Clear')),
         ['core','event','work','personal'].map(cat=>{const list=grp[cat];if(!list||!list.length)return null;const c=CAT[cat],coll=!!collCats[cat];
           return h('div',{key:cat,style:{marginBottom:coll?6:16}},
             h('div',{style:{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:700,textTransform:'uppercase',color:c.text,marginBottom:coll?0:6,padding:'0 4px',cursor:'pointer'},onClick:()=>setCollCats(p=>({...p,[cat]:!p[cat]}))},
