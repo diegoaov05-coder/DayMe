@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-23 v8.5
+// BUILD: 2026-02-25 v8.6
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -359,9 +359,10 @@ function App(){
       stats:{total:doneTasks.length,completed:Object.keys(comp).length,skipped:Object.keys(skip).length}};
     setDailyLogs(p=>[log,...p]);
     setPostEnd(doneIds);
-    // Apply tomorrow's planned order if set
+    setComp({});setSkip({});setHold({});setInventory([]);setCEnd(false);ntfSet.current.clear();remSet.current.clear();
+    // Apply tomorrow's planned order after clearing
     if(nextDayOrder){setTasks(prev=>prev.map(t=>nextDayOrder[t.id]!=null?{...t,order:nextDayOrder[t.id]}:t));setNextDayOrder(null)}
-    markDirty();setComp({});setSkip({});setHold({});setInventory([]);setCEnd(false);ntfSet.current.clear();remSet.current.clear();
+    markDirty();
   };
   const delT=id=>{markDirty();const subs=tasks.filter(t=>t.parentId===id).map(t=>t.id);const all=[id,...subs];setTasks(p=>p.filter(t=>!all.includes(t.id)).map(t=>t.dependsOn&&all.includes(t.dependsOn)?{...t,dependsOn:null}:t));all.forEach(d=>{setComp(p=>{const n={...p};delete n[d];return n});setSkip(p=>{const n={...p};delete n[d];return n})});setCDel(null)};
   const svT=td=>{markDirty();if(td.id)setTasks(p=>p.map(t=>t.id===td.id?td:t));else setTasks(p=>[...p,{...td,id:gid(),order:p.length}]);setEditing(null)};
@@ -433,7 +434,7 @@ function App(){
     if(tc){const at=tc.dayOverrides&&tc.dayOverrides[dw]?tc.dayOverrides[dw]:tc.time;if(at&&toM(ct)<toM(at))return true}
     return false;
   });
-  const aheadT=nonEv.filter(t=>!resolved(t.id)&&t.id!==(nxt?.id)&&!blockedT.find(b=>b.id===t.id)&&!isHeld(t.id));
+  const aheadT=nonEv.filter(t=>!resolved(t.id)&&t.id!==(nxt?.id)&&!blockedT.find(b=>b.id===t.id));
 
   const rCnt=dayT.filter(t=>resolved(t.id)).length;
   const pct=dayT.length?rCnt/dayT.length:0;
@@ -504,9 +505,12 @@ function App(){
     if(cat==='event')btns.push(h('button',{key:'arc',style:{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',background:'#1e293b',border:'none',borderRadius:5,color:'#94a3b8',cursor:'pointer'},onClick:()=>arT(task.id)},h(IC.Archive)));
     else btns.push(h('button',{key:'del',style:{width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',background:'#1e293b',border:'none',borderRadius:5,color:'#f87171',cursor:'pointer'},onClick:()=>setCDel(task.id)},h(IC.Trash)));
 
+    const wasEnd=postEnd&&postEnd.has(task.id);
+
     const nameRow=h('div',{style:{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}},
       h('span',{style:{fontSize:12,fontWeight:600,color:done?'#64748b':'#e2e8f0',textDecoration:done?'line-through':'none'}},task.name),
       (task.isGoal||parentHasGoal(task.id))?h('span',{style:{fontSize:8,color:'#fbbf24'}},'🎯'):null,
+      wasEnd?h('span',{style:{fontSize:8,color:'#34d399',fontWeight:700}},'✨'):null,
       subs.length>0?h('button',{style:{fontSize:9,color:'#475569',background:'none',border:'none',cursor:'pointer',padding:'0 4px'},onClick:e=>{e.stopPropagation();setCollSubs(p=>({...p,[task.id]:!p[task.id]}))}},subsColl?'▸ '+subs.length+' sub':'▾ '+subs.length+' sub'):null);
 
     const infoRow=chips.length>0?h('div',{style:{display:'flex',flexWrap:'wrap',gap:4,marginTop:2}},chips):null;
@@ -545,7 +549,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':tab==='admin'?'Manage':'Log'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'8.5'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'8.6'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
