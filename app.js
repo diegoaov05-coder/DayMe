@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-25 v9.0
+// BUILD: 2026-02-25 v9.1
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -644,7 +644,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':tab==='admin'?'Manage':'Log'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'9.0'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'9.1'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
@@ -739,7 +739,24 @@ function App(){
             h('button',{style:{width:24,height:24,background:'#1e293b',border:'none',borderRadius:6,color:'#60a5fa',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>unT(t.id)},'↩'),
             h('button',{style:{width:24,height:24,background:'#1e293b',border:'none',borderRadius:6,color:'#f87171',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setCDel(t.id)},h(IC.Trash))))),
         h('button',{style:{position:'fixed',bottom:74,right:'calc(50% - 215px)',width:50,height:50,borderRadius:14,background:'linear-gradient(135deg,#f59e0b,#d97706)',border:'none',color:'#0c0f1a',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:'0 6px 24px rgba(245,158,11,0.3)',zIndex:90},onClick:()=>setEditing('new')},h(IC.Plus)),
-        h('button',{style:{position:'fixed',bottom:74,right:'calc(50% - 155px)',width:50,height:50,borderRadius:14,background:'linear-gradient(135deg,#3b82f6,#2563eb)',border:'none',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:'0 6px 24px rgba(59,130,246,0.3)',zIndex:90,fontSize:20},onClick:()=>setShowImport(true)},'📥'))
+        h('button',{style:{position:'fixed',bottom:74,right:'calc(50% - 155px)',width:50,height:50,borderRadius:14,background:'linear-gradient(135deg,#3b82f6,#2563eb)',border:'none',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:'0 6px 24px rgba(59,130,246,0.3)',zIndex:90,fontSize:20},onClick:()=>setShowImport(true)},'📥'),
+        h('button',{style:{position:'fixed',bottom:74,right:'calc(50% - 95px)',width:50,height:50,borderRadius:14,background:'linear-gradient(135deg,#8b5cf6,#7c3aed)',border:'none',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:'0 6px 24px rgba(139,92,246,0.3)',zIndex:90,fontSize:20},onClick:()=>{
+          const cats=['core','event','work','personal'];const catLabel={core:'Core',event:'Events',work:'Work',personal:'Personal'};
+          const lines=[];
+          cats.forEach(cat=>{
+            const ts=tasks.filter(t=>t.category===cat&&!t.archived&&!t.parentId);
+            if(!ts.length)return;
+            lines.push('## '+catLabel[cat]);
+            ts.forEach(t=>{
+              const ad=toArr(t.activeDays);const days=ad.length>0&&ad.length<7?' ['+ad.map(d=>DL[d]).join('')+']':'';
+              const time=t.timeCondition?(' '+t.timeCondition.time):'';
+              const proj=t.project?' — '+t.project:'';
+              lines.push('- [ ] '+t.name+proj+time+days);
+              const subs=tasks.filter(s=>s.parentId===t.id&&!s.archived);
+              subs.forEach(s=>lines.push('    - [ ] '+s.name));
+            });lines.push('')});
+          navigator.clipboard.writeText(lines.join('\n')).then(()=>{setBanner('📋 Tasks copied for Notion!');setTimeout(()=>setBanner(null),2000)}).catch(()=>{})
+        }},'📤'))
     :
     // ═══ LOG ═══
     h(LogView,{dailyLogs,lifeGoals,setLifeGoals,timeline,setTimeline,markDirty,F})),
