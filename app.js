@@ -3,7 +3,7 @@ firebase.initializeApp({apiKey:"AIzaSyAfMcI-3cIwWz1AlrkmisqNuZvcJ7wUfP4",authDom
 const db=firebase.database(),dataRef=db.ref('routineApp');
 let swReg=null;if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').then(r=>{swReg=r}).catch(()=>{});
 function ntfy(t,b,g){if(swReg)try{swReg.showNotification(t,{body:b,tag:g||'md',renotify:true,vibrate:[200,100,200],requireInteraction:true})}catch(e){}else if('Notification' in window&&Notification.permission==='granted')try{new Notification(t,{body:b,tag:g||'md'})}catch(e){}}
-// BUILD: 2026-02-25 v9.1
+// BUILD: 2026-02-25 v9.3
 const LK='routine-sync-v6',DAYS=['sun','mon','tue','wed','thu','fri','sat'],DF={sun:'Sun',mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat'},DL={sun:'S',mon:'M',tue:'T',wed:'W',thu:'T',fri:'F',sat:'S'},ALL_DAYS=[...DAYS];
 const getDow=()=>DAYS[new Date().getDay()];
 const getISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -644,7 +644,7 @@ function App(){
     h('div',{style:{padding:'14px 16px 10px',background:'linear-gradient(180deg,#0c0f1a,rgba(12,15,26,0.95))',position:'sticky',top:0,zIndex:50,backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(148,163,184,0.06)',display:'flex',alignItems:'center',gap:8}},
       h('div',{style:{display:'flex',alignItems:'center',gap:8,flex:1}},
         h('span',{style:{fontSize:20,fontWeight:700,color:'#f8fafc'}},tab==='day'?'My Day':tab==='admin'?'Manage':'Log'),
-        h('span',{style:{fontSize:9,color:'#334155'}},'9.1'),
+        h('span',{style:{fontSize:9,color:'#334155'}},'9.3'),
         h('span',{style:{fontSize:13,color:'#64748b'}},ct),
         h('span',{className:'sd '+(synced?'sd-on':'sd-off')})),
       focusProj&&tab==='day'&&h('button',{style:{fontSize:9,padding:'3px 6px',borderRadius:5,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setFocusProj(null)},'⚡'+focusProj+' ✕'),
@@ -752,6 +752,7 @@ function App(){
               const time=t.timeCondition?(' '+t.timeCondition.time):'';
               const proj=t.project?' — '+t.project:'';
               lines.push('- [ ] '+t.name+proj+time+days);
+              if(t.notes&&t.notes.trim())lines.push('    > '+t.notes.trim().replace(/\n/g,'\n    > '));
               const subs=tasks.filter(s=>s.parentId===t.id&&!s.archived);
               subs.forEach(s=>lines.push('    - [ ] '+s.name));
             });lines.push('')});
@@ -778,9 +779,9 @@ function App(){
         const newTasks=[];
         items.forEach((item,i)=>{
           const pid=gid();
-          newTasks.push({id:pid,name:item.name,category:item.category,project:'',notes:'',timeCondition:null,dependsOn:null,activeDays:[...ALL_DAYS],eventDates:[],archived:false,order:maxOrd+i,reminderMin:0,isGoal:false,parentId:null});
+          newTasks.push({id:pid,name:item.name,category:item.category,project:item.project||'',notes:item.notes||'',timeCondition:null,dependsOn:null,activeDays:[...ALL_DAYS],eventDates:[],archived:false,order:maxOrd+i,reminderMin:0,isGoal:false,parentId:null});
           (item.subs||[]).forEach((s,j)=>{
-            newTasks.push({id:gid(),name:s,category:item.category,project:'',notes:'',timeCondition:null,dependsOn:null,activeDays:[...ALL_DAYS],eventDates:[],archived:false,order:j,reminderMin:0,isGoal:false,parentId:pid});
+            newTasks.push({id:gid(),name:s,category:item.category,project:item.project||'',notes:'',timeCondition:null,dependsOn:null,activeDays:[...ALL_DAYS],eventDates:[],archived:false,order:j,reminderMin:0,isGoal:false,parentId:pid});
           });
         });
         return[...prev,...newTasks]});
@@ -905,44 +906,50 @@ function TaskForm({task,allTasks,onSave,onClose}){
 // ═══ IMPORT SHEET ═══
 function ImportSheet({onImport,onClose}){
   const[raw,setRaw]=useState('');
-  const[parsed,setParsed]=useState(null); // [{name,subs:[],category:'work',selected:true}]
+  const[parsed,setParsed]=useState(null);
+  const[editIdx,setEditIdx]=useState(null);
   const F='Inter,system-ui,sans-serif';
 
   const doParse=()=>{
     const lines=raw.split('\n').filter(l=>l.trim());
     const items=[];let current=null;
     lines.forEach(line=>{
-      // Detect indent level: tabs or 2+ spaces
       const stripped=line.replace(/^[\s\t]+/,'');
       const indent=line.length-line.trimStart().length;
-      // Clean checkbox markers
       const clean=stripped.replace(/^[-•*]\s*/,'').replace(/^(\[[ x]?\]|☐|☑|✅|✓|□|■)\s*/,'').trim();
       if(!clean)return;
-      if(indent>=2&&current){
-        // Subtask
-        current.subs.push(clean);
-      }else{
-        // New parent task
-        current={name:clean,subs:[],category:'work',selected:true};
-        items.push(current);
+      // Check if it's a note line (starts with >)
+      if(clean.startsWith('>')){
+        const noteText=clean.replace(/^>\s*/,'').trim();
+        if(noteText&&current){current.notes=current.notes?(current.notes+'\n'+noteText):noteText}
+        return;
       }
+      // Extract #project tag
+      const projMatch=clean.match(/#(\S+)\s*$/);
+      const project=projMatch?projMatch[1]:'';
+      const name=projMatch?clean.replace(/#\S+\s*$/,'').trim():clean;
+      if(!name)return;
+      if(indent>=2&&current){current.subs.push(name)}
+      else{current={name,subs:[],category:'work',selected:true,project,notes:''};items.push(current)}
     });
     setParsed(items);
   };
 
-  const toggleSel=(i)=>setParsed(p=>p.map((t,j)=>j===i?{...t,selected:!t.selected}:t));
-  const toggleCat=(i)=>setParsed(p=>p.map((t,j)=>j===i?{...t,category:t.category==='work'?'personal':'work'}:t));
-  const setAllCat=(cat)=>setParsed(p=>p.map(t=>({...t,category:cat})));
-
+  const upd=(i,k,v)=>setParsed(p=>p.map((t,j)=>j===i?{...t,[k]:v}:t));
+  const toggleSel=i=>upd(i,'selected',!parsed[i].selected);
+  const toggleCat=i=>upd(i,'category',parsed[i].category==='work'?'personal':'work');
+  const setAllCat=cat=>setParsed(p=>p.map(t=>({...t,category:cat})));
   const doImport=()=>{const sel=parsed.filter(t=>t.selected);if(sel.length)onImport(sel)};
+
+  const inp=(v,f,ph,extra)=>h('input',{style:{width:'100%',padding:7,background:'#0f172a',border:'1px solid #1e293b',borderRadius:6,color:'#cbd5e1',fontSize:11,fontFamily:F,outline:'none',boxSizing:'border-box',...(extra||{})},value:v,onChange:e=>f(e.target.value),placeholder:ph});
 
   return h('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'flex-end',justifyContent:'center',zIndex:200,padding:16},onClick:onClose},
     h('div',{style:{width:'100%',maxWidth:420,background:'#1e293b',borderRadius:18,padding:'20px 18px',maxHeight:'85vh',overflow:'auto'},onClick:e=>e.stopPropagation()},
       h('h2',{style:{fontSize:16,fontWeight:700,color:'#f8fafc',margin:'0 0 4px'}},'📥 Import from Notion'),
-      h('div',{style:{fontSize:11,color:'#64748b',marginBottom:12}},'Copy tasks from Notion and paste below'),
+      h('div',{style:{fontSize:11,color:'#64748b',marginBottom:12}},'Paste tasks, then tap any task to add project/notes'),
       !parsed?
         h('div',null,
-          h('textarea',{style:{width:'100%',padding:'12px',background:'#0f172a',border:'1px solid #334155',borderRadius:10,color:'#e2e8f0',fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box',minHeight:150,resize:'vertical'},value:raw,onChange:e=>setRaw(e.target.value),placeholder:'Paste your tasks here...\n\nExample:\nFinish report\n  Research data\n  Write draft\nReview PRs'}),
+          h('textarea',{style:{width:'100%',padding:'12px',background:'#0f172a',border:'1px solid #334155',borderRadius:10,color:'#e2e8f0',fontSize:13,fontFamily:F,outline:'none',boxSizing:'border-box',minHeight:150,resize:'vertical'},value:raw,onChange:e=>setRaw(e.target.value),placeholder:'Paste tasks from Notion...\n\nFormat:\nTask name #Project\n  Subtask 1\n  Subtask 2\n  > This becomes a note\nAnother task #Work\n  > Notes go here too'}),
           h('div',{style:{display:'flex',gap:8,marginTop:12}},
             h('button',{style:{flex:1,padding:12,background:'#0f172a',border:'1px solid #334155',borderRadius:10,color:'#94a3b8',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F},onClick:onClose},'Cancel'),
             h('button',{style:{flex:1,padding:12,background:raw.trim()?'linear-gradient(135deg,#3b82f6,#2563eb)':'#1e293b',border:'none',borderRadius:10,color:raw.trim()?'#fff':'#475569',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F},onClick:raw.trim()?doParse:null},'Parse Tasks')))
@@ -952,13 +959,18 @@ function ImportSheet({onImport,onClose}){
             h('button',{style:{fontSize:10,padding:'4px 10px',borderRadius:6,background:'rgba(59,130,246,0.12)',border:'1px solid rgba(59,130,246,0.25)',color:'#60a5fa',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setAllCat('work')},'All → Work'),
             h('button',{style:{fontSize:10,padding:'4px 10px',borderRadius:6,background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.25)',color:'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>setAllCat('personal')},'All → Personal'),
             h('button',{style:{marginLeft:'auto',fontSize:10,padding:'4px 10px',borderRadius:6,background:'rgba(100,116,139,0.1)',border:'1px solid rgba(100,116,139,0.2)',color:'#64748b',cursor:'pointer',fontFamily:F,fontWeight:600},onClick:()=>setParsed(null)},'← Back')),
-          parsed.map((t,i)=>h('div',{key:i,style:{background:t.selected?'#111827':'rgba(17,24,39,0.4)',borderRadius:10,padding:'10px 12px',marginBottom:4,opacity:t.selected?1:0.4,borderLeft:'3px solid '+(t.category==='work'?'#3b82f6':'#a855f7')}},
-            h('div',{style:{display:'flex',alignItems:'center',gap:8}},
-              h('button',{style:{width:20,height:20,borderRadius:5,border:'2px solid '+(t.selected?'#10b981':'#334155'),background:t.selected?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,color:'#fff',fontSize:12},onClick:()=>toggleSel(i)},t.selected?'✓':''),
-              h('span',{style:{flex:1,fontSize:13,fontWeight:600,color:'#e2e8f0'}},t.name),
-              h('button',{style:{fontSize:9,padding:'2px 8px',borderRadius:5,border:'1px solid '+(t.category==='work'?'rgba(59,130,246,0.3)':'rgba(168,85,247,0.3)'),background:t.category==='work'?'rgba(59,130,246,0.12)':'rgba(168,85,247,0.12)',color:t.category==='work'?'#60a5fa':'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:()=>toggleCat(i)},t.category==='work'?'💼 Work':'🟢 Personal')),
-            t.subs.length>0&&h('div',{style:{marginTop:6,paddingLeft:28}},
-              t.subs.map((s,j)=>h('div',{key:j,style:{fontSize:11,color:'#94a3b8',padding:'2px 0'}},'↳ '+s))))),
+          parsed.map((t,i)=>{const isEdit=editIdx===i;
+            return h('div',{key:i,style:{background:t.selected?'#111827':'rgba(17,24,39,0.4)',borderRadius:10,padding:'10px 12px',marginBottom:4,opacity:t.selected?1:0.4,borderLeft:'3px solid '+(t.category==='work'?'#3b82f6':'#a855f7')},onClick:()=>t.selected&&setEditIdx(isEdit?null:i)},
+              h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+                h('button',{style:{width:20,height:20,borderRadius:5,border:'2px solid '+(t.selected?'#10b981':'#334155'),background:t.selected?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,color:'#fff',fontSize:12},onClick:e=>{e.stopPropagation();toggleSel(i)}},t.selected?'✓':''),
+                h('span',{style:{flex:1,fontSize:13,fontWeight:600,color:'#e2e8f0'}},t.name),
+                (t.project||t.notes)&&h('span',{style:{fontSize:8,color:'#64748b'}},'✎'),
+                h('button',{style:{fontSize:9,padding:'2px 8px',borderRadius:5,border:'1px solid '+(t.category==='work'?'rgba(59,130,246,0.3)':'rgba(168,85,247,0.3)'),background:t.category==='work'?'rgba(59,130,246,0.12)':'rgba(168,85,247,0.12)',color:t.category==='work'?'#60a5fa':'#c084fc',cursor:'pointer',fontFamily:F,fontWeight:700},onClick:e=>{e.stopPropagation();toggleCat(i)}},t.category==='work'?'💼':'🟢')),
+              t.subs.length>0&&h('div',{style:{marginTop:4,paddingLeft:28}},
+                t.subs.map((s,j)=>h('div',{key:j,style:{fontSize:11,color:'#94a3b8',padding:'1px 0'}},'↳ '+s))),
+              isEdit&&h('div',{style:{marginTop:8,display:'flex',flexDirection:'column',gap:6},onClick:e=>e.stopPropagation()},
+                inp(t.project,v=>upd(i,'project',v),'Project (e.g. Mutún, CFA)'),
+                h('textarea',{style:{width:'100%',padding:7,background:'#0f172a',border:'1px solid #1e293b',borderRadius:6,color:'#cbd5e1',fontSize:11,fontFamily:F,outline:'none',boxSizing:'border-box',minHeight:40,resize:'vertical'},value:t.notes,onChange:e=>upd(i,'notes',e.target.value),placeholder:'Notes...'})))}),
           h('div',{style:{display:'flex',gap:8,marginTop:12}},
             h('button',{style:{flex:1,padding:12,background:'#0f172a',border:'1px solid #334155',borderRadius:10,color:'#94a3b8',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:F},onClick:onClose},'Cancel'),
             h('button',{style:{flex:1,padding:12,background:'linear-gradient(135deg,#10b981,#059669)',border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:F},onClick:doImport},'Import '+parsed.filter(t=>t.selected).length+' tasks')))));
